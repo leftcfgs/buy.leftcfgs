@@ -1,4 +1,4 @@
--- Internal | unnamed God Edition (Expanded & Professional Structure)
+-- Internal (Expanded & Professional Structure)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
