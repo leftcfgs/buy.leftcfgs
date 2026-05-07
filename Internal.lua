@@ -1,4 +1,4 @@
--- L-Internal.hook | Precision Aimbot Update
+-- L-Internal.hook | Ultimate Custom Update
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -8,61 +8,128 @@ local Camera = workspace.CurrentCamera
 
 -- 重複防止
 for _, v in pairs(game.CoreGui:GetChildren()) do
-    if v.Name == "L-Internal_Pro" then v:Destroy() end
+    if v.Name == "L-Internal_Ultimate" then v:Destroy() end
 end
 
--- --- 設定 ---
-_G.AimbotEnabled = false
-_G.AimbotKey = Enum.KeyCode.E
-_G.AimbotFOV = 150
-_G.Smoothness = 0.2 -- 0.1(超速) ～ 1(低速) で調整してくれ
+-- --- デフォルト設定 ---
+local Settings = {
+    AimbotEnabled = false,
+    AimbotKey = Enum.KeyCode.E,
+    AimbotMode = "Toggle", -- "Toggle", "Hold", "Always"
+    FOV = 150,
+    Smoothness = 0.2,
+    Binding = false
+}
 
--- FOV円
+-- --- FOVの円 ---
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Thickness = 2
 FOVCircle.Color = Color3.fromRGB(255, 0, 50)
-FOVCircle.Transparency = 0.7
 FOVCircle.Visible = true
-FOVCircle.Radius = _G.AimbotFOV
+FOVCircle.Radius = Settings.FOV
 
--- UI
+-- --- UI作成 ---
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-ScreenGui.Name = "L-Internal_Pro"
+ScreenGui.Name = "L-Internal_Ultimate"
+
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 200, 0, 100)
-MainFrame.Position = UDim2.new(0.5, -100, 0.5, -50)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.Size = UDim2.new(0, 220, 0, 280)
+MainFrame.Position = UDim2.new(0.5, -110, 0.5, -140)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BorderSizePixel = 0
 MainFrame.Draggable = true
 MainFrame.Active = true
 
 local Title = Instance.new("TextLabel", MainFrame)
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.Text = "L-INTERNAL | AIM"
-Title.TextColor3 = Color3.fromRGB(255, 0, 50)
-Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.Text = "L-INTERNAL | ULTIMATE"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.BackgroundColor3 = Color3.fromRGB(255, 0, 50)
 
-local StatusLabel = Instance.new("TextLabel", MainFrame)
-StatusLabel.Size = UDim2.new(1, 0, 0, 70)
-StatusLabel.Position = UDim2.new(0, 0, 0, 30)
-StatusLabel.Text = "Status: OFF [E]"
-StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-StatusLabel.BackgroundTransparency = 1
+-- 設定用関数（ボタン作成の自動化）
+local function createButton(text, pos, parent)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(0, 200, 0, 30)
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Text = text
+    btn.Font = Enum.Font.Code
+    return btn
+end
 
--- キー判定
+-- 各ボタン
+local KeyBtn = createButton("Key: E", UDim2.new(0, 10, 0, 45), MainFrame)
+local ModeBtn = createButton("Mode: Toggle", UDim2.new(0, 10, 0, 85), MainFrame)
+local FOVPlus = createButton("FOV +", UDim2.new(0, 10, 0, 125), MainFrame)
+local FOVMinus = createButton("FOV -", UDim2.new(0, 115, 0, 125), MainFrame)
+FOVPlus.Size = UDim2.new(0, 95, 0, 30)
+FOVMinus.Size = UDim2.new(0, 95, 0, 30)
+
+local SmoothPlus = createButton("Smooth +", UDim2.new(0, 10, 0, 165), MainFrame)
+local SmoothMinus = createButton("Smooth -", UDim2.new(0, 115, 0, 165), MainFrame)
+SmoothPlus.Size = UDim2.new(0, 95, 0, 30)
+SmoothMinus.Size = UDim2.new(0, 95, 0, 30)
+
+local Status = Instance.new("TextLabel", MainFrame)
+Status.Size = UDim2.new(1, 0, 0, 40)
+Status.Position = UDim2.new(0, 0, 0, 210)
+Status.Text = "STATUS: OFF"
+Status.TextColor3 = Color3.fromRGB(255, 255, 255)
+Status.BackgroundTransparency = 1
+
+-- --- ロジック ---
+
+-- キーバインド変更
+KeyBtn.MouseButton1Click:Connect(function()
+    Settings.Binding = true
+    KeyBtn.Text = "Press any key..."
+end)
+
 UserInputService.InputBegan:Connect(function(input, gp)
-    if not gp and input.KeyCode == _G.AimbotKey then
-        _G.AimbotEnabled = not _G.AimbotEnabled
-        StatusLabel.Text = _G.AimbotEnabled and "Status: ON [E]" or "Status: OFF [E]"
-        StatusLabel.TextColor3 = _G.AimbotEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 255, 255)
+    if Settings.Binding and input.UserInputType == Enum.UserInputType.Keyboard then
+        Settings.AimbotKey = input.KeyCode
+        KeyBtn.Text = "Key: " .. tostring(input.KeyCode.Name)
+        Settings.Binding = false
+        return
+    end
+
+    if not gp then
+        if Settings.AimbotMode == "Toggle" and input.KeyCode == Settings.AimbotKey then
+            Settings.AimbotEnabled = not Settings.AimbotEnabled
+        elseif Settings.AimbotMode == "Hold" and input.KeyCode == Settings.AimbotKey then
+            Settings.AimbotEnabled = true
+        end
     end
 end)
 
--- ターゲット取得
+UserInputService.InputEnded:Connect(function(input)
+    if Settings.AimbotMode == "Hold" and input.KeyCode == Settings.AimbotKey then
+        Settings.AimbotEnabled = false
+    end
+end)
+
+-- モード切替
+ModeBtn.MouseButton1Click:Connect(function()
+    if Settings.AimbotMode == "Toggle" then Settings.AimbotMode = "Hold"
+    elseif Settings.AimbotMode == "Hold" then Settings.AimbotMode = "Always"
+    else Settings.AimbotMode = "Toggle" end
+    ModeBtn.Text = "Mode: " .. Settings.AimbotMode
+    Settings.AimbotEnabled = (Settings.AimbotMode == "Always")
+end)
+
+-- FOV & Smooth 調整
+FOVPlus.MouseButton1Click:Connect(function() Settings.FOV = Settings.FOV + 10 end)
+FOVMinus.MouseButton1Click:Connect(function() Settings.FOV = Settings.FOV - 10 end)
+SmoothPlus.MouseButton1Click:Connect(function() Settings.Smoothness = math.min(Settings.Smoothness + 0.05, 1) end)
+SmoothMinus.MouseButton1Click:Connect(function() Settings.Smoothness = math.max(Settings.Smoothness - 0.05, 0.05) end)
+
+-- エイムターゲット取得
 local function getTarget()
     local nearest = nil
-    local lastDist = _G.AimbotFOV
+    local lastDist = Settings.FOV
     for _, v in pairs(Players:GetPlayers()) do
-        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character.Humanoid.Health > 0 then
             local pos, onScreen = Camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
             if onScreen then
                 local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
@@ -79,20 +146,15 @@ end
 -- メインループ
 RunService.RenderStepped:Connect(function()
     FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + 36)
-    
-    if _G.AimbotEnabled then
+    FOVCircle.Radius = Settings.FOV
+    Status.Text = "Smooth: " .. string.format("%.2f", Settings.Smoothness) .. " | FOV: " .. Settings.FOV
+    Status.TextColor3 = Settings.AimbotEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 255, 255)
+
+    if Settings.AimbotEnabled then
         local target = getTarget()
-        if target then
+        if target and mousemoverel then
             local targetPos = Camera:WorldToViewportPoint(target.Character.HumanoidRootPart.Position)
-            -- ここでマウスを直接動かす（mousemoverelはExecutorの機能）
-            if mousemoverel then
-                local centerX = Mouse.X
-                local centerY = Mouse.Y + 36
-                mousemoverel((targetPos.X - centerX) * _G.Smoothness, (targetPos.Y - centerY) * _G.Smoothness)
-            else
-                -- mousemoverelがないExecutor用の予備
-                Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.HumanoidRootPart.Position)
-            end
+            mousemoverel((targetPos.X - Mouse.X) * Settings.Smoothness, (targetPos.Y - (Mouse.Y + 36)) * Settings.Smoothness)
         end
     end
 end)
