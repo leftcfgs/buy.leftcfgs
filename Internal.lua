@@ -1,4 +1,4 @@
--- Internal | unnamed Ultimate Overload (3s Phased Load / Full Features)
+-- Internal | unnamed God Edition (Expanded & Professional Structure)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -6,155 +6,219 @@ local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local Camera = workspace.CurrentCamera
 
--- 重複防止
+-- 重複防止 & 既存のクリーンアップ
 local existing = game.CoreGui:FindFirstChild("UnnamedUltimate")
 if existing then existing:Destroy() end
 
--- --- 全設定 (大幅増量) ---
+-- --- 全設定 (さらに細分化) ---
 _G.Settings = {
+    -- Aimbot
     Aimbot = false,
     AimbotKey = Enum.UserInputType.MouseButton2,
-    HitPart = "HumanoidRootPart",
+    HitPart = "HumanoidRootPart", -- "Head" も選択可能に
     FOV = 150,
     ShowFOV = true,
     Smooth = 0.1,
-    -- Visuals
+    -- Visuals (ESP)
     ESP = false,
     Box = false,
     Name = false,
     Dist = false,
     Tracer = false,
-    MaxDist = 2000,
-    -- Movement
-    SpeedHack = false,
-    WalkSpeed = 50,
-    JumpHack = false,
-    JumpPower = 100,
-    Fly = false,
-    FlySpeed = 50,
-    Noclip = false,
+    ESP_Color = Color3.fromRGB(0, 255, 200),
+    MaxDist = 3000,
+    -- Movement & Physics
     Underground = false,
     UG_Offset = -5,
-    -- Combat (Experimental)
-    InfiniteAmmo = false, -- 弾丸消費無効(一部ゲーム)
-    NoRecoil = false,     -- 反動抑制
-    RapidFire = false,    -- 連射
-    -- UI
+    Noclip = false,
+    Fly = false,
+    FlySpeed = 60,
+    SpeedHack = false,
+    WalkSpeed = 60,
+    JumpHack = false,
+    JumpPower = 100,
+    -- Combat / Misc
+    InfiniteJump = false,
+    NoRecoil = false,
+    RapidFire = false,
+    -- UI State
     MenuKey = Enum.KeyCode.Insert,
     BindingMenu = false,
-    BindingAim = false
+    BindingAim = false,
+    Visible = false
 }
 local S = _G.Settings
 
--- --- UI構築 ---
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "UnnamedUltimate"
+-- --- UIコンポーネント (コード密度向上) ---
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.Name = "UnnamedUltimate"
+
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 550, 0, 650); Main.Position = UDim2.new(0.5, -275, 0.5, -325)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15); Main.BorderSizePixel = 0; Main.Active = true; Main.Draggable = true; Main.Visible = false
-local Header = Instance.new("Frame", Main)
-Header.Size = UDim2.new(1, 0, 0, 4); Header.BackgroundColor3 = Color3.fromRGB(0, 255, 200); Header.BorderSizePixel = 0
+Main.Size = UDim2.new(0, 550, 0, 700)
+Main.Position = UDim2.new(0.5, -275, 0.5, -350)
+Main.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Main.Visible = false
+
+local TopBar = Instance.new("Frame", Main)
+TopBar.Size = UDim2.new(1, 0, 0, 3)
+TopBar.BackgroundColor3 = Color3.fromRGB(0, 255, 200)
+TopBar.BorderSizePixel = 0
+
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.Position = UDim2.new(0, 0, 0, 5)
+Title.Text = "INTERNAL | UNNAMED GOD EDITION"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.Code
+Title.TextSize = 16
+Title.BackgroundTransparency = 1
 
 local Content = Instance.new("ScrollingFrame", Main)
-Content.Size = UDim2.new(1, -20, 1, -50); Content.Position = UDim2.new(0, 10, 0, 40)
-Content.BackgroundTransparency = 1; Content.ScrollBarThickness = 6; Content.CanvasSize = UDim2.new(0, 0, 0, 1500)
+Content.Size = UDim2.new(1, -20, 1, -50)
+Content.Position = UDim2.new(0, 10, 0, 45)
+Content.BackgroundTransparency = 1
+Content.ScrollBarThickness = 4
+Content.CanvasSize = UDim2.new(0, 0, 0, 1600)
 
-local function createTgl(txt, key, y)
+-- --- トグル & 入力 生成 ---
+local function AddToggle(text, settingKey, yPos)
     local btn = Instance.new("TextButton", Content)
-    btn.Size = UDim2.new(1, -10, 0, 35); btn.Position = UDim2.new(0, 5, 0, y)
-    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30); btn.TextColor3 = S[key] and Color3.new(0,1,0.8) or Color3.new(0.6,0.6,0.6)
-    btn.Text = "  [+] " .. txt .. ": " .. (S[key] and "ACTIVE" or "OFF"); btn.TextXAlignment = Enum.TextXAlignment.Left; btn.Font = Enum.Font.Code; btn.TextSize = 14
+    btn.Size = UDim2.new(1, -10, 0, 38)
+    btn.Position = UDim2.new(0, 5, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local function update()
+        btn.Text = "  [" .. (S[settingKey] and "X" or " ") .. "] " .. text
+        btn.TextColor3 = S[settingKey] and Color3.new(0, 1, 0.8) or Color3.new(0.5, 0.5, 0.5)
+    end
+    
     btn.MouseButton1Click:Connect(function()
-        S[key] = not S[key]
-        btn.Text = "  [+] " .. txt .. ": " .. (S[key] and "ACTIVE" or "OFF")
-        btn.TextColor3 = S[key] and Color3.new(0,1,0.8) or Color3.new(0.6,0.6,0.6)
-        if key == "Fly" then applyFly() end
+        S[settingKey] = not S[settingKey]
+        update()
+        if settingKey == "Fly" then ApplyFlight() end
     end)
+    update()
+    return btn
 end
 
-local function createInput(txt, key, y)
-    local box = Instance.new("TextBox", Content)
-    box.Size = UDim2.new(1, -10, 0, 35); box.Position = UDim2.new(0, 5, 0, y)
-    box.BackgroundColor3 = Color3.fromRGB(20, 20, 20); box.TextColor3 = Color3.new(1, 1, 1); box.Font = Enum.Font.Code
-    box.Text = "  " .. txt .. ": " .. tostring(S[key]); box.TextXAlignment = Enum.TextXAlignment.Left
+local function AddInput(text, settingKey, yPos)
+    local frame = Instance.new("Frame", Content)
+    frame.Size = UDim2.new(1, -10, 0, 38)
+    frame.Position = UDim2.new(0, 5, 0, yPos)
+    frame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+    frame.BorderSizePixel = 0
+    
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = "  " .. text
+    label.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+    label.Font = Enum.Font.Code
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local box = Instance.new("TextBox", frame)
+    box.Size = UDim2.new(0.4, -5, 0.8, 0)
+    box.Position = UDim2.new(0.6, 0, 0.1, 0)
+    box.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    box.Text = tostring(S[settingKey])
+    box.TextColor3 = Color3.new(1, 1, 1)
+    box.Font = Enum.Font.Code
+    
     box.FocusLost:Connect(function()
-        local val = tonumber(box.Text:match("-?%d+"))
-        if val then S[key] = val; box.Text = "  " .. txt .. ": " .. tostring(S[key]) end
+        local val = tonumber(box.Text:match("-?%d+%.?%d*"))
+        if val then S[settingKey] = val end
+        box.Text = tostring(S[settingKey])
     end)
 end
 
--- --- 3秒遅延ロード (全機能一気出し) ---
+-- --- 3秒段階ロード (機能配置) ---
 task.spawn(function()
-    task.wait(3.0) 
+    task.wait(3.0) -- ぱいせん指定の3秒
     Main.Visible = true
     
-    -- [Combat Section]
-    createTgl("Aimbot System", "Aimbot", 10)
-    createTgl("Show FOV Range", "ShowFOV", 50)
-    createInput("FOV Radius", "FOV", 90)
-    createTgl("No Recoil (Safe)", "NoRecoil", 130)
-    createTgl("Rapid Fire (Experimental)", "RapidFire", 170)
+    local curY = 0
+    local function gap(v) curY = curY + v end
 
-    -- [Visuals Section]
-    createTgl("Player ESP", "ESP", 220)
-    createTgl("ESP Box", "Box", 260)
-    createTgl("ESP Name", "Name", 300)
-    createTgl("ESP Tracers", "Tracer", 340)
-
-    -- [Movement Section]
-    createTgl("Underground Mode", "Underground", 390)
-    createTgl("Noclip (Anti-Void)", "Noclip", 430)
-    createTgl("Fly Enabled", "Fly", 470)
-    createTgl("Speed Hack", "SpeedHack", 510)
-    createInput("Custom Speed", "WalkSpeed", 550)
-    createTgl("Jump Hack", "JumpHack", 590)
-    createInput("Jump Power", "JumpPower", 630)
-
-    -- [Settings Section]
+    -- [COMBAT]
+    AddToggle("Aimbot Master", "Aimbot", curY); gap(42)
+    AddToggle("Show FOV Circle", "ShowFOV", curY); gap(42)
+    AddInput("FOV Radius", "FOV", curY); gap(42)
+    AddToggle("Target: Head Only", "HitPart", curY); gap(42) -- 切り替えロジックは下に
+    
+    gap(20) -- Section Space
+    
+    -- [VISUALS]
+    AddToggle("Enable Player ESP", "ESP", curY); gap(42)
+    AddToggle("ESP Box", "Box", curY); gap(42)
+    AddToggle("ESP Names", "Name", curY); gap(42)
+    AddToggle("ESP Distance", "Dist", curY); gap(42)
+    AddToggle("ESP Tracers", "Tracer", curY); gap(42)
+    
+    gap(20)
+    
+    -- [MOVEMENT & UNDERGROUND]
+    AddToggle("Underground (-5 Fixed)", "Underground", curY); gap(42)
+    AddToggle("Noclip (Ghost Mode)", "Noclip", curY); gap(42)
+    AddToggle("Flight Enabled", "Fly", curY); gap(42)
+    AddInput("Flight Speed", "FlySpeed", curY); gap(42)
+    AddToggle("Speed Hack", "SpeedHack", curY); gap(42)
+    AddInput("Walk Speed Value", "WalkSpeed", curY); gap(42)
+    
+    -- [BINDS]
     local AimBind = Instance.new("TextButton", Content)
-    AimBind.Size = UDim2.new(1,-10,0,35); AimBind.Position = UDim2.new(0,5,0,680); AimBind.BackgroundColor3 = Color3.fromRGB(30,30,30); AimBind.TextColor3 = Color3.new(1,1,1); AimBind.Font = Enum.Font.Code; AimBind.TextXAlignment = Enum.TextXAlignment.Left
-    AimBind.MouseButton1Click:Connect(function() S.BindingAim = true; AimBind.Text = "  [Waiting for Input...]" end)
-
+    AimBind.Size = UDim2.new(1,-10,0,38); AimBind.Position = UDim2.new(0,5,0,curY); AimBind.BackgroundColor3 = Color3.fromRGB(25,25,25); AimBind.TextSize = 14; AimBind.Font = Enum.Font.Code; AimBind.TextColor3 = Color3.new(1,1,1)
+    AimBind.MouseButton1Click:Connect(function() S.BindingAim = true; AimBind.Text = "[Press Key]" end)
+    gap(42)
+    
     local MenuBind = Instance.new("TextButton", Content)
-    MenuBind.Size = UDim2.new(1,-10,0,35); MenuBind.Position = UDim2.new(0,5,0,720); MenuBind.BackgroundColor3 = Color3.fromRGB(30,30,30); MenuBind.TextColor3 = Color3.new(1,1,1); MenuBind.Font = Enum.Font.Code; MenuBind.TextXAlignment = Enum.TextXAlignment.Left
-    MenuBind.MouseButton1Click:Connect(function() S.BindingMenu = true; MenuBind.Text = "  [Waiting for Input...]" end)
+    MenuBind.Size = UDim2.new(1,-10,0,38); MenuBind.Position = UDim2.new(0,5,0,curY); MenuBind.BackgroundColor3 = Color3.fromRGB(25,25,25); MenuBind.TextSize = 14; MenuBind.Font = Enum.Font.Code; MenuBind.TextColor3 = Color3.new(1,1,1)
+    MenuBind.MouseButton1Click:Connect(function() S.BindingMenu = true; MenuBind.Text = "[Press Key]" end)
 
     task.spawn(function()
-        while task.wait(0.2) do
+        while task.wait(0.1) do
             if not S.BindingAim then AimBind.Text = "  Aim Key: " .. (tostring(S.AimbotKey):gsub("Enum.KeyCode.", ""):gsub("Enum.UserInputType.", "")) end
             if not S.BindingMenu then MenuBind.Text = "  Menu Key: " .. tostring(S.MenuKey.Name) end
+            S.HitPart = S.HitPart == true and "Head" or "HumanoidRootPart"
         end
     end)
 end)
 
--- --- コアロジック (Underground / Movement) ---
+-- --- コア物理エンジン (Underground / Anti-Void) ---
 RunService.PostSimulation:Connect(function()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not root or not hum then return end
 
-    -- 地下潜行 & 地上視点
     if S.Underground then
         local ray = Ray.new(root.Position + Vector3.new(0, 10, 0), Vector3.new(0, -30, 0))
         local _, pos = workspace:FindPartOnRayWithIgnoreList(ray, {char})
+        
+        -- 物理ロック (落下防止)
         root.CFrame = CFrame.new(root.Position.X, pos.Y + S.UG_Offset, root.Position.Z) * root.CFrame.Rotation
         root.Velocity = Vector3.new(root.Velocity.X, 0, root.Velocity.Z)
+        
+        -- 地上視点オフセット
         hum.CameraOffset = Vector3.new(0, -S.UG_Offset, 0)
     else
         hum.CameraOffset = Vector3.new(0, 0, 0)
     end
 
-    -- スピード・ジャンプハック
     if S.SpeedHack then hum.WalkSpeed = S.WalkSpeed end
-    if S.JumpHack then hum.JumpPower = S.JumpPower; hum.UseJumpPower = true end
-
-    -- Noclip
     if S.Noclip then
         for _, v in pairs(char:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
     end
 end)
 
--- --- キーバインド処理 ---
+-- --- バインド & 入力 ---
 UserInputService.InputBegan:Connect(function(i, g)
     if S.BindingAim or S.BindingMenu then
         local k = (i.KeyCode ~= Enum.KeyCode.Unknown and i.KeyCode or i.UserInputType)
@@ -165,8 +229,8 @@ UserInputService.InputBegan:Connect(function(i, g)
     end
 end)
 
--- --- 飛行 & エイム ---
-function applyFly()
+-- --- Flight / Aimbot / ESP ---
+function ApplyFlight()
     if _G.FlyLoop then _G.FlyLoop:Disconnect(); _G.FlyLoop = nil end
     local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not S.Fly or not root then return end
@@ -178,13 +242,18 @@ function applyFly()
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += Camera.CFrame.LookVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= Camera.CFrame.LookVector end
             bv.Velocity = move.Unit * S.FlySpeed
+            if move == Vector3.new(0,0,0) then bv.Velocity = Vector3.new(0,0,0) end
         end)
     end)
 end
 
+-- [エイム & ESP コア]
 local FOVCircle = Drawing.new("Circle"); FOVCircle.Thickness = 1; FOVCircle.Color = Color3.fromRGB(0, 255, 200)
+local ESP_Lines = {}
+
 RunService.RenderStepped:Connect(function()
     FOVCircle.Visible = S.ShowFOV; FOVCircle.Radius = S.FOV; FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + 36)
+    
     if S.Aimbot and ((tostring(S.AimbotKey):find("MouseButton") and UserInputService:IsMouseButtonPressed(S.AimbotKey)) or UserInputService:IsKeyDown(S.AimbotKey)) then
         local target, lastDist = nil, S.FOV
         for _, p in pairs(Players:GetPlayers()) do
