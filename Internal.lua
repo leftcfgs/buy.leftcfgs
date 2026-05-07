@@ -1,4 +1,4 @@
--- L-Internal.hook | Stable God Update
+-- L-Internal.hook | Ultimate Edition (ESP & Aimbot Update)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -6,186 +6,139 @@ local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local Camera = workspace.CurrentCamera
 
--- 重複防止（古いUIを確実に消す）
-local existing = game.CoreGui:FindFirstChild("L-Internal_God")
+-- 重複防止（Internalに名称変更）
+local existing = game.CoreGui:FindFirstChild("Internal")
 if existing then existing:Destroy() end
 
--- --- 設定 ---
-local Settings = {
+-- --- 全体設定 ---
+_G.L_Internal_Settings = {
+    -- Aimbot
     AimbotEnabled = false,
     AimbotKey = Enum.KeyCode.E,
-    AimbotKeyType = "Keyboard",
-    AimbotMode = "Toggle",
-    HitPart = "HumanoidRootPart",
+    AimbotKeyType = "Keyboard", -- "Keyboard" or "Mouse"
+    AimbotMode = "Toggle", -- "Toggle", "Hold", "Always"
+    HitPart = "HumanoidRootPart", -- "Head", "UpperTorso", "HumanoidRootPart"
     FOV = 150,
+    ShowFOV = true,
     Smoothness = 0.2,
+    
+    -- ESP
+    ESPEnabled = true,
+    Boxes = true,
+    Skeletons = true,
+    Names = true,
+    HealthBar = true,
+    Distance = true,
+    Weapons = true,
+    
+    -- 他
+    ThemeColor = Color3.fromRGB(255, 0, 50),
     Binding = false
 }
+local S = _G.L_Internal_Settings
 
--- --- FOVの円（描画負荷を軽減） ---
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 1
-FOVCircle.Color = Color3.fromRGB(255, 0, 50)
-FOVCircle.Visible = true
-FOVCircle.Radius = Settings.FOV
+-- --- 描画オブジェクト管理 ---
+local Drawings = {
+    FOV = Drawing.new("Circle"),
+    ESP = {}
+}
+
+Drawings.FOV.Thickness = 1
+Drawings.FOV.Color = S.ThemeColor
+Drawings.FOV.Visible = S.ShowFOV
+Drawings.FOV.Radius = S.FOV
+
+local function clearESP()
+    for _, playerObj in pairs(Drawings.ESP) do
+        for _, draw in pairs(playerObj) do
+            draw.Visible = false
+            draw:Remove()
+        end
+    end
+    Drawings.ESP = {}
+end
 
 -- --- UI作成 ---
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-ScreenGui.Name = "L-Internal_God"
+ScreenGui.Name = "Internal"
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 240, 0, 320)
-MainFrame.Position = UDim2.new(0.5, -120, 0.5, -160)
+MainFrame.Size = UDim2.new(0, 360, 0, 360)
+MainFrame.Position = UDim2.new(0.5, -180, 0.5, -180)
 MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 MainFrame.Active = true
 MainFrame.Draggable = true
 
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Size = UDim2.new(1, 0, 0, 35)
-Title.Text = "L-INTERNAL | GOD v2"
+Title.Text = "L-INTERNAL | ULTIMATE"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.BackgroundColor3 = Color3.fromRGB(255, 0, 50)
+Title.BackgroundColor3 = S.ThemeColor
+Title.Font = Enum.Font.Code
+
+-- スクロールフレーム（機能が増えたため）
+local Scroll = Instance.new("ScrollingFrame", MainFrame)
+Scroll.Size = UDim2.new(1, 0, 1, -35)
+Scroll.Position = UDim2.new(0, 0, 0, 35)
+Scroll.BackgroundTransparency = 1
+Scroll.CanvasSize = UDim2.new(0, 0, 0, 500)
+Scroll.ScrollBarThickness = 5
 
 -- 汎用関数
-local function createBtn(text, pos, parent)
+local function createBtn(text, pos, parent, sizeX, sizeY)
     local btn = Instance.new("TextButton", parent)
-    btn.Size = UDim2.new(0, 220, 0, 30)
+    btn.Size = UDim2.new(0, sizeX or 340, 0, 30)
     btn.Position = pos
-    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     btn.TextColor3 = Color3.fromRGB(200, 200, 200)
     btn.Text = text
+    btn.Font = Enum.Font.Code
     return btn
 end
 
-local KeyBtn = createBtn("Key: E", UDim2.new(0, 10, 0, 45), MainFrame)
-local ModeBtn = createBtn("Mode: Toggle", UDim2.new(0, 10, 0, 85), MainFrame)
-local PartBtn = createBtn("Target: Body", UDim2.new(0, 10, 0, 125), MainFrame)
-
--- 数値入力（TextBoxの変更を即時反映させず、FocusLostで安全に処理）
-local FOVInput = Instance.new("TextBox", MainFrame)
-FOVInput.Size = UDim2.new(0, 220, 0, 30)
-FOVInput.Position = UDim2.new(0, 10, 0, 165)
-FOVInput.Text = "150"
-FOVInput.PlaceholderText = "FOV (Number)"
-FOVInput.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-FOVInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-
-local SmoothInput = Instance.new("TextBox", MainFrame)
-SmoothInput.Size = UDim2.new(0, 220, 0, 30)
-SmoothInput.Position = UDim2.new(0, 10, 0, 205)
-SmoothInput.Text = "0.2"
-SmoothInput.PlaceholderText = "Smooth (0.05-1)"
-SmoothInput.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-SmoothInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-
-local Status = Instance.new("TextLabel", MainFrame)
-Status.Size = UDim2.new(1, 0, 0, 40)
-Status.Position = UDim2.new(0, 0, 0, 260)
-Status.Text = "STABLE READY"
-Status.TextColor3 = Color3.fromRGB(0, 255, 100)
-Status.BackgroundTransparency = 1
-
--- --- 修正版ロジック ---
-
-FOVInput.FocusLost:Connect(function() 
-    local n = tonumber(FOVInput.Text)
-    if n then Settings.FOV = n end
-end)
-
-SmoothInput.FocusLost:Connect(function()
-    local n = tonumber(SmoothInput.Text)
-    if n then Settings.Smoothness = math.clamp(n, 0.01, 1) end
-end)
-
-PartBtn.MouseButton1Click:Connect(function()
-    if Settings.HitPart == "HumanoidRootPart" then Settings.HitPart = "Head"
-    elseif Settings.HitPart == "Head" then Settings.HitPart = "UpperTorso"
-    else Settings.HitPart = "HumanoidRootPart" end
-    PartBtn.Text = "Target: " .. Settings.HitPart
-end)
-
-KeyBtn.MouseButton1Click:Connect(function()
-    Settings.Binding = true
-    KeyBtn.Text = "Press any key..."
-end)
-
--- 入力処理
-UserInputService.InputBegan:Connect(function(input, gp)
-    if Settings.Binding then
-        if input.UserInputType == Enum.UserInputType.Keyboard then
-            Settings.AimbotKey = input.KeyCode
-            Settings.AimbotKeyType = "Keyboard"
-            KeyBtn.Text = "Key: " .. input.KeyCode.Name
-        elseif input.UserInputType.Name:find("MouseButton") then
-            Settings.AimbotKey = input.UserInputType
-            Settings.AimbotKeyType = "Mouse"
-            KeyBtn.Text = "Key: " .. input.UserInputType.Name
-        end
-        Settings.Binding = false
-        return
-    end
-
-    if not gp then
-        local match = (Settings.AimbotKeyType == "Keyboard" and input.KeyCode == Settings.AimbotKey) or (Settings.AimbotKeyType == "Mouse" and input.UserInputType == Settings.AimbotKey)
-        if match and Settings.AimbotMode == "Toggle" then
-            Settings.AimbotEnabled = not Settings.AimbotEnabled
-        elseif match and Settings.AimbotMode == "Hold" then
-            Settings.AimbotEnabled = true
-        end
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    local match = (Settings.AimbotKeyType == "Keyboard" and input.KeyCode == Settings.AimbotKey) or (Settings.AimbotKeyType == "Mouse" and input.UserInputType == Settings.AimbotKey)
-    if match and Settings.AimbotMode == "Hold" then
-        Settings.AimbotEnabled = false
-    end
-end)
-
-ModeBtn.MouseButton1Click:Connect(function()
-    if Settings.AimbotMode == "Toggle" then Settings.AimbotMode = "Hold"
-    elseif Settings.AimbotMode == "Hold" then Settings.AimbotMode = "Always"
-    else Settings.AimbotMode = "Toggle" end
-    ModeBtn.Text = "Mode: " .. Settings.AimbotMode
-    Settings.AimbotEnabled = (Settings.AimbotMode == "Always")
-end)
-
--- ターゲット取得（負荷軽減：生きているプレイヤーのみ検索）
-local function getTarget()
-    local nearest = nil
-    local lastDist = Settings.FOV
-    for _, v in pairs(Players:GetPlayers()) do
-        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild(Settings.HitPart) then
-            local hum = v.Character:FindFirstChild("Humanoid")
-            if hum and hum.Health > 0 then
-                local pos, onScreen = Camera:WorldToViewportPoint(v.Character[Settings.HitPart].Position)
-                if onScreen then
-                    local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
-                    if dist < lastDist then
-                        lastDist = dist
-                        nearest = v
-                    end
-                end
-            end
-        end
-    end
-    return nearest
+local function createBox(text, pos, parent, placeholder)
+    local box = Instance.new("TextBox", parent)
+    box.Size = UDim2.new(0, 340, 0, 30)
+    box.Position = pos
+    box.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    box.TextColor3 = Color3.fromRGB(255, 255, 255)
+    box.Text = text
+    box.PlaceholderText = placeholder or ""
+    box.Font = Enum.Font.Code
+    return box
 end
 
--- メインループ
-RunService.RenderStepped:Connect(function()
-    FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + 36)
-    FOVCircle.Radius = Settings.FOV
-    Status.Text = Settings.AimbotEnabled and "AIMBOT: ACTIVE" or "AIMBOT: WAITING"
-    Status.TextColor3 = Settings.AimbotEnabled and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(200, 200, 200)
+-- Aimbot セクション
+local AimTitle = Instance.new("TextLabel", Scroll)
+AimTitle.Size = UDim2.new(1, 0, 0, 30)
+AimTitle.Position = UDim2.new(0, 0, 0, 0)
+AimTitle.Text = "=== AIMBOT ==="
+AimTitle.TextColor3 = S.ThemeColor
+AimTitle.BackgroundTransparency = 1
 
-    if Settings.AimbotEnabled then
-        local target = getTarget()
-        if target and mousemoverel then
-            local targetPos = Camera:WorldToViewportPoint(target.Character[Settings.HitPart].Position)
-            -- 計算を安定させるために小さな待ち時間を考慮したような処理
-            mousemoverel((targetPos.X - Mouse.X) * Settings.Smoothness, (targetPos.Y - (Mouse.Y + 36)) * Settings.Smoothness)
-        end
-    end
-end)
+local KeyBtn = createBtn("Key: E", UDim2.new(0, 10, 0, 30), Scroll)
+local ModeBtn = createBtn("Mode: Toggle", UDim2.new(0, 10, 0, 65), Scroll)
+local PartBtn = createBtn("Target: Body", UDim2.new(0, 10, 0, 100), Scroll)
+local FOVBtn = createBtn("Show FOV: ON", UDim2.new(0, 10, 0, 135), Scroll)
+
+local FOVInput = createBox(tostring(S.FOV), UDim2.new(0, 10, 0, 170), Scroll, "FOV (10 - 500)")
+local SmoothInput = createBox(tostring(S.Smoothness), UDim2.new(0, 10, 0, 205), Scroll, "Smooth (0.01 - 1)")
+
+-- ESP セクション
+local ESPTitle = Instance.new("TextLabel", Scroll)
+ESPTitle.Size = UDim2.new(1, 0, 0, 30)
+ESPTitle.Position = UDim2.new(0, 0, 0, 245)
+ESPTitle.Text = "=== ESP ==="
+ESPTitle.TextColor3 = S.ThemeColor
+ESPTitle.BackgroundTransparency = 1
+
+local TglESP = createBtn("ESP: ON", UDim2.new(0, 10, 0, 275), Scroll)
+local TglBox = createBtn("Box: ON", UDim2.new(0, 10, 0, 310), Scroll, 165)
+local TglSkel = createBtn("Skeleton: ON", UDim2.new(0, 185, 0, 310), Scroll, 165)
+local TglName = createBtn("Name: ON", UDim2.new(0, 10, 0, 345), Scroll, 165)
+local TglHP = createBtn("Health: ON", UDim2.new(0, 185, 0, 345), Scroll, 165)
+local TglDist = createBtn("Distance: ON", UDim2.new(0, 10, 0, 380), Scroll, 165)
+local TglWpn = createBtn("Weapon: ON", UDim2.new(0, 185, 0, 380), Scroll, 165)
+
+local Status = Instance.new("TextLabel", MainFrame)
