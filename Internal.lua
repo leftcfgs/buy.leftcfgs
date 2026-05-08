@@ -1,5 +1,5 @@
 -- ==========================================================
--- UNNAMED GOD EDITION (FULL RECOVERY)
+-- mirukuyowasugidaro (FULL RECOVERY)
 -- Features: Full Aim/ESP/Misc/Settings + Sequential Load
 -- ==========================================================
 
