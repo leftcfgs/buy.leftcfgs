@@ -1,5 +1,5 @@
 -- ==========================================================
--- mirukuyowasugidaro (FULL RECOVERY)
+-- mirukuyowasugidaro v1 (FULL RECOVERY)
 -- Features: Full Aim/ESP/Misc/Settings + Sequential Load
 -- ==========================================================
 
