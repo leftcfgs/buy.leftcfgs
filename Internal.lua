@@ -1,6 +1,6 @@
 -- ==========================================================
--- INTERNAL | UNNAMED GOD EDITION (SEQUENTIAL LOAD)
--- 5s Delay + Sequential Init (0.5s intervals)
+-- UNNAMED GOD-TIER | OVERLOAD EDITION
+-- WARNING: HIGH RISK / HIGH PERFORMANCE
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -11,136 +11,142 @@ local Mouse = LocalPlayer:GetMouse()
 local Camera = workspace.CurrentCamera
 
 -- 重複防止
-if game.CoreGui:FindFirstChild("UnnamedSequential") then
-    game.CoreGui:FindFirstChild("UnnamedSequential"):Destroy()
-end
+if game.CoreGui:FindFirstChild("UnnamedOverload") then game.CoreGui.UnnamedOverload:Destroy() end
 
 -- --- 設定 ---
 _G.Settings = {
-    Aimbot = false, SilentAim = false, Ragebot = false,
-    AimbotKey = Enum.UserInputType.MouseButton2, HitPart = "Head",
-    FOV = 150, ShowFOV = true, Smooth = 0.1, HitChance = 100,
-    ESP = false, Box = false, Name = false, Dist = false,
-    Underground = false, UG_Offset = -3, Noclip = false,
-    SpeedHack = false, WalkSpeed = 80, Fly = false, FlySpeed = 70,
-    MenuKey = Enum.KeyCode.Insert, BindingMenu = false, BindingAim = false
+    Tab = "Main",
+    -- Aim
+    SilentAim = false, HitChance = 100, HitPart = "Head", FOV = 200,
+    -- Weapon
+    RapidFire = false, InstantHit = false,
+    -- Character
+    Underground = false, UG_Offset = -3.5, WalkSpeed = 100, SpeedActive = false,
+    -- System
+    MenuKey = Enum.KeyCode.Insert
 }
 local S = _G.Settings
 
--- --- UI構築 ---
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "UnnamedSequential"
+-- --- UI構築 (Unnamed Clone) ---
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "UnnamedOverload"
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 580, 0, 750); Main.Position = UDim2.new(0.5, -290, 0.5, -375)
-Main.BackgroundColor3 = Color3.fromRGB(10, 10, 10); Main.BorderSizePixel = 0; Main.Visible = false
+Main.Size = UDim2.new(0, 520, 0, 420); Main.Position = UDim2.new(0.5, -260, 0.5, -210)
+Main.BackgroundColor3 = Color3.fromRGB(12, 12, 12); Main.BorderSizePixel = 0; Main.Active = true; Main.Draggable = true
 
-local Content = Instance.new("ScrollingFrame", Main)
-Content.Size = UDim2.new(1, -20, 1, -60); Content.Position = UDim2.new(0, 10, 0, 50)
-Content.BackgroundTransparency = 1; Content.ScrollBarThickness = 2; Content.CanvasSize = UDim2.new(0, 0, 0, 2500)
+local TabBar = Instance.new("Frame", Main)
+TabBar.Size = UDim2.new(1, 0, 0, 40); TabBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20); TabBar.BorderSizePixel = 0
 
--- UIパーツ関数
-local function AddSect(t, y)
-    local l = Instance.new("TextLabel", Content); l.Size = UDim2.new(1, 0, 0, 30); l.Position = UDim2.new(0, 0, 0, y)
-    l.BackgroundTransparency = 1; l.Text = "--- " .. t .. " ---"; l.TextColor3 = Color3.fromRGB(0, 255, 150); l.Font = Enum.Font.Code; l.TextSize = 14; return y + 35
-end
-local function AddTog(t, k, y)
-    local b = Instance.new("TextButton", Content); b.Size = UDim2.new(1,-10,0,32); b.Position = UDim2.new(0,5,0,y); b.BackgroundColor3 = Color3.fromRGB(20,20,20); b.Font = Enum.Font.Code; b.TextSize = 13
-    b.MouseButton1Click:Connect(function() S[k] = not S[k] end)
-    task.spawn(function() while task.wait(0.2) do b.Text = " [" .. (S[k] and "ON" or "OFF") .. "] " .. t; b.TextColor3 = S[k] and Color3.new(0,1,0.6) or Color3.new(0.5,0.5,0.5) end end)
-    return y + 35
-end
-local function AddInp(t, k, y)
-    local f = Instance.new("Frame", Content); f.Size = UDim2.new(1,-10,0,32); f.Position = UDim2.new(0,5,0,y); f.BackgroundColor3 = Color3.fromRGB(15,15,15); f.BorderSizePixel = 0
-    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(0.6,0,1,0); l.BackgroundTransparency = 1; l.Text = "  "..t; l.TextColor3 = Color3.new(0.7,0.7,0.7); l.Font = Enum.Font.Code; l.TextSize = 12; l.TextXAlignment = Enum.TextXAlignment.Left
-    local b = Instance.new("TextBox", f); b.Size = UDim2.new(0.4,-5,0.8,0); b.Position = UDim2.new(0.6,0,0.1,0); b.BackgroundColor3 = Color3.fromRGB(30,30,30); b.Text = tostring(S[k]); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.Code
-    b.FocusLost:Connect(function() local v = tonumber(b.Text); if v then S[k] = v end b.Text = tostring(S[k]) end); return y + 35
+local Container = Instance.new("ScrollingFrame", Main)
+Container.Size = UDim2.new(1, -20, 1, -60); Container.Position = UDim2.new(0, 10, 0, 50)
+Container.BackgroundTransparency = 1; Container.BorderSizePixel = 0; Container.ScrollBarThickness = 2
+
+local function CreateTab(name, x)
+    local btn = Instance.new("TextButton", TabBar)
+    btn.Size = UDim2.new(0, 90, 1, 0); btn.Position = UDim2.new(0, x, 0, 0)
+    btn.BackgroundTransparency = 1; btn.Text = name; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.Code; btn.TextSize = 14
+    btn.MouseButton1Click:Connect(function() S.Tab = name; RefreshUI() end)
 end
 
--- --- 【重要】ちょっとずつ起動 (Sequential Boot) ---
-task.spawn(function()
-    print("Unnamed: Waiting 5s for base stability...")
-    task.wait(5.0)
-    Main.Visible = true
+CreateTab("Main", 10); CreateTab("Visuals", 110); CreateTab("Misc", 210); CreateTab("Settings", 310)
+
+function RefreshUI()
+    for _, v in pairs(Container:GetChildren()) do v:Destroy() end
     local y = 10
-    
-    -- 0.5秒おきに各セクションをロードしてラグを分散
-    y = AddSect("MAIN (AIM)", y)
-    y = AddTog("Aimbot Master", "Aimbot", y)
-    y = AddTog("Silent Aim", "SilentAim", y)
-    y = AddInp("Hit Chance", "HitChance", y)
-    y = AddTog("Ragebot", "Ragebot", y)
-    y = AddInp("FOV Size", "FOV", y)
-    y = AddInp("Smoothness", "Smooth", y)
-    task.wait(0.5)
-    
-    y = AddSect("ESP", y)
-    y = AddTog("Master ESP", "ESP", y)
-    y = AddTog("Box", "Box", y)
-    y = AddTog("Name", "Name", y)
-    task.wait(0.5)
-    
-    y = AddSect("CHARACTER", y)
-    y = AddTog("Underground (-3)", "Underground", y)
-    y = AddTog("Noclip", "Noclip", y)
-    y = AddTog("Speed Hack", "SpeedHack", y)
-    y = AddInp("Walk Speed", "WalkSpeed", y)
-    y = AddTog("Flight", "Fly", y)
-    y = AddInp("Fly Speed", "FlySpeed", y)
-    task.wait(0.5)
-    
-    y = AddSect("SETTINGS", y)
-    local AimBind = Instance.new("TextButton", Content); AimBind.Size = UDim2.new(1,-10,0,32); AimBind.Position = UDim2.new(0,5,0,y); AimBind.BackgroundColor3 = Color3.fromRGB(30,15,15); AimBind.Font = Enum.Font.Code; y=y+35
-    local MenuBind = Instance.new("TextButton", Content); MenuBind.Size = UDim2.new(1,-10,0,32); MenuBind.Position = UDim2.new(0,5,0,y); MenuBind.BackgroundColor3 = Color3.fromRGB(20,20,20); MenuBind.Font = Enum.Font.Code
-    
-    AimBind.MouseButton1Click:Connect(function() S.BindingAim = true end)
-    MenuBind.MouseButton1Click:Connect(function() S.BindingMenu = true end)
-    
-    task.spawn(function() while task.wait(0.1) do
-        AimBind.Text = S.BindingAim and "[PRESS KEY]" or ("> Aim Key: " .. (tostring(S.AimbotKey):gsub("Enum.KeyCode.", ""):gsub("Enum.UserInputType.", "")))
-        MenuBind.Text = S.BindingMenu and "[PRESS KEY]" or ("> Menu Key: " .. tostring(S.MenuKey.Name))
-    end end)
+    local function AddTog(txt, key)
+        local b = Instance.new("TextButton", Container); b.Size = UDim2.new(1,0,0,32); b.Position = UDim2.new(0,0,0,y)
+        b.BackgroundColor3 = S[key] and Color3.fromRGB(0, 150, 255) or Color3.fromRGB(25, 25, 25)
+        b.Text = " " .. txt .. " [" .. (S[key] and "ON" or "OFF") .. "]"; b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.Code; b.TextSize = 13
+        b.MouseButton1Click:Connect(function() S[key] = not S[key]; RefreshUI() end); y = y + 36
+    end
+    local function AddInp(txt, key)
+        local f = Instance.new("TextBox", Container); f.Size = UDim2.new(1,0,0,32); f.Position = UDim2.new(0,0,0,y)
+        f.BackgroundColor3 = Color3.fromRGB(20, 20, 20); f.Text = txt .. ": " .. tostring(S[key]); f.TextColor3 = Color3.new(0.8,0.8,0.8); f.Font = Enum.Font.Code
+        f.FocusLost:Connect(function() local v = tonumber(f.Text:match("%d+")); if v then S[key] = v end RefreshUI() end); y = y + 36
+    end
+
+    if S.Tab == "Main" then
+        AddTog("Silent Aim (Metatable Hook)", "SilentAim")
+        AddInp("Hit Chance", "HitChance")
+        AddTog("Rapid Fire (Engine Overload)", "RapidFire")
+    elseif S.Tab == "Misc" then
+        AddTog("Underground (Perfect Fixed)", "Underground")
+        AddTog("Speed Hack", "SpeedActive")
+        AddInp("WalkSpeed Value", "WalkSpeed")
+    end
+end
+RefreshUI()
+
+-- --- 核心機能：Silent Aim (ガチ勢仕様) ---
+local function GetClosestPlayer()
+    local target, nearest = nil, S.FOV
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(S.HitPart) then
+            local pos, onScreen = Camera:WorldToViewportPoint(p.Character[S.HitPart].Position)
+            if onScreen then
+                local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
+                if dist < nearest then nearest = dist; target = p end
+            end
+        end
+    end
+    return target
+end
+
+local oldNC
+oldNC = hookmetamethod(game, "__namecall", function(self, ...)
+    local args = {...}
+    local method = getnamecallmethod()
+    if S.SilentAim and method == "FindPartOnRayWithIgnoreList" or method == "Raycast" then
+        local t = GetClosestPlayer()
+        if t and math.random(1, 100) <= S.HitChance then
+            -- 弾丸のレイを敵のHitPartへ強制書き換え
+            if method == "Raycast" then
+                args[2] = (t.Character[S.HitPart].Position - args[1]).Unit * 1000
+            else
+                args[1] = Ray.new(args[1].Origin, (t.Character[S.HitPart].Position - args[1].Origin).Unit * 1000)
+            end
+        end
+    end
+    return oldNC(self, unpack(args))
 end)
 
--- --- Underground 視点修正 & 物理 ---
-local CamPart = Instance.new("Part")
-CamPart.Transparency = 1; CamPart.CanCollide = false; CamPart.Anchored = true; CamPart.Parent = workspace
-
+-- --- 核心機能：Underground (完全地上固定) ---
+local CamPart = Instance.new("Part", workspace)
+CamPart.Transparency = 1; CamPart.Anchored = true; CamPart.CanCollide = false
 RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
     if S.Underground then
-        -- 体を地下へ
-        root.Velocity = Vector3.new(root.Velocity.X, 0, root.Velocity.Z)
-        root.CFrame = CFrame.new(root.Position.X, workspace:FindPartOnRay(Ray.new(root.Position + Vector3.new(0,5,0), Vector3.new(0,-10,0)), char).Y + S.UG_Offset, root.Position.Z) * root.CFrame.Rotation
-        
-        -- カメラを地上へ強制固定
+        root.Velocity = Vector3.new(0, 0, 0)
+        root.CFrame = root.CFrame * CFrame.new(0, S.UG_Offset, 0)
+        -- カメラを地上の元の高さに維持
         CamPart.CFrame = root.CFrame * CFrame.new(0, -S.UG_Offset, 0)
         Camera.CameraSubject = CamPart
     else
         Camera.CameraSubject = char:FindFirstChildOfClass("Humanoid")
     end
+end)
 
-    if S.Noclip then
-        for _, v in pairs(char:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
+-- --- 核心機能：Rapid Fire ---
+RunService.Heartbeat:Connect(function()
+    if S.RapidFire and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+        -- 物理的なクリック入力をバイパスして発射判定をループさせる
+        -- (この部分はゲームごとのRemoteイベント発火に書き換えるとさらに最強になる)
+        for i = 1, 5 do -- 1フレームに5回発射命令
+            task.spawn(function()
+                -- マウスクリックの擬似信号
+                game:GetService("VirtualInputManager"):SendMouseButtonEvent(Mouse.X, Mouse.Y, 0, true, game, 1)
+                game:GetService("VirtualInputManager"):SendMouseButtonEvent(Mouse.X, Mouse.Y, 0, false, game, 1)
+            end)
+        end
+    end
+    if S.SpeedActive and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = S.WalkSpeed
     end
 end)
 
--- --- Movement & Combat ---
-RunService.Heartbeat:Connect(function()
-    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum and S.SpeedHack then hum.WalkSpeed = S.WalkSpeed end
+-- メニュー開閉
+UserInputService.InputBegan:Connect(function(i, g)
+    if not g and i.KeyCode == S.MenuKey then Main.Visible = not Main.Visible end
 end)
-
-local FOVCircle = Drawing.new("Circle"); FOVCircle.Thickness = 1; FOVCircle.Color = Color3.new(0,1,0.6)
-RunService.RenderStepped:Connect(function()
-    FOVCircle.Visible = S.ShowFOV; FOVCircle.Radius = S.FOV; FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + 36)
-    local aiming = (tostring(S.AimbotKey):find("MouseButton") and UserInputService:IsMouseButtonPressed(S.AimbotKey)) or UserInputService:IsKeyDown(S.AimbotKey)
-    if (S.Aimbot and aiming) or S.Ragebot then
-        local target, last = nil, (S.Ragebot and 10000 or S.FOV)
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(S.HitPart) then
-                local pos, os = Camera:WorldToViewportPoint(p.Character[S.HitPart].Position)
-                if os or S.Ragebot then
-                    local mag = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
-                    if mag < last then last = mag;
