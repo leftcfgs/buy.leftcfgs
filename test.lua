@@ -1,214 +1,186 @@
--- [[ tested internal: Rage-Master Engine for Rivals ]]
--- UI & Core Settings
+-- [[ tested internal v3.2: Full Rage Projectile Engine ]]
+-- Rivalsの武器システムを完全に支配するためのガチ構成だ。
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
-getgenv().SwiftConfig = {
+-- // グローバル設定（UEと競合しないようにUE風の構造に）
+getgenv().SwiftSettings = {
     Enabled = true,
-    Prediction = true,
-    VelocityMult = 1.5, -- 予測の強さ
-    HitChance = 100,
-    ProjectileSpeed = 850, -- 武器ごとの平均速度
+    TeamCheck = true,
+    VisibleCheck = false, -- Ragebot前提なのでfalse
     TargetPart = "Head",
-    IgnoreTeam = true
+    PredictionScale = 1.65, -- 予測の強さ
+    ProjectileSpeed = 800,
+    DropAmount = 0.05, -- 弾道落下の補正値
+    FovSize = 400
 }
 
--- // 高精度ターゲット予測システム
-local function GetPredictedPosition(target)
-    local character = target.Character
-    local root = character:FindFirstChild("HumanoidRootPart")
-    local targetPart = character:FindFirstChild(getgenv().SwiftConfig.TargetPart)
+-- // 武器プロファイル（これがあるから重くなるが、正確になる）
+local WeaponData = {
+    ["Slingshot"] = {Speed = 430, Prediction = 1.35, Gravity = true},
+    ["Recurve Bow"] = {Speed = 350, Prediction = 1.9, Gravity = true},
+    ["Dagger"] = {Speed = 620, Prediction = 1.1, Gravity = false},
+    ["Rocket Launcher"] = {Speed = 280, Prediction = 2.4, Gravity = false},
+    ["Crossbow"] = {Speed = 500, Prediction = 1.5, Gravity = true},
+    ["Firework Launcher"] = {Speed = 320, Prediction = 2.2, Gravity = false}
+}
+
+local CurrentWeapon = "Default"
+
+-- // 高精度予測エンジン（心臓部）
+local function CalculatePrediction(target)
+    local char = target.Character
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local head = char:FindFirstChild(getgenv().SwiftSettings.TargetPart)
     
-    if not root or not targetPart then return nil end
+    if not root or not head then return nil end
     
-    local myPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position or Camera.CFrame.Position
-    local distance = (targetPart.Position - myPos).Magnitude
-    local timeToHit = distance / getgenv().SwiftConfig.ProjectileSpeed
+    -- 弾速の取得
+    local speed = getgenv().SwiftSettings.ProjectileSpeed
+    local startPos = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")) and LocalPlayer.Character.Head.Position or Camera.CFrame.Position
     
-    -- 相手の速度(Velocity)から未来の座標を計算
-    local predictedPos = targetPart.Position + (root.Velocity * timeToHit * getgenv().SwiftConfig.VelocityMult)
+    -- 距離と着弾時間の計算
+    local distance = (head.Position - startPos).Magnitude
+    local timeToHit = distance / speed
     
-    -- 重力補正 (Drop Correction)
-    local drop = 0.5 * workspace.Gravity * (timeToHit ^ 2)
-    return predictedPos + Vector3.new(0, drop, 0)
+    -- [[ 未来予測ロジック ]]
+    -- 相手の移動速度(Velocity)から座標を算出
+    local vel = root.Velocity
+    local predictedPos = head.Position + (vel * timeToHit * getgenv().SwiftSettings.PredictionScale)
+    
+    -- 重力加速度による弾道落下の計算 (G * t^2 / 2)
+    if WeaponData[CurrentWeapon] and WeaponData[CurrentWeapon].Gravity then
+        local gravity = workspace.Gravity * getgenv().SwiftSettings.DropAmount
+        predictedPos = predictedPos + Vector3.new(0, (gravity * (timeToHit ^ 2)), 0)
+    end
+    
+    -- 空中・ジャンプ時の追加補正
+    if not (char.Humanoid:GetState() == Enum.HumanoidStateType.Running) then
+        predictedPos = predictedPos + Vector3.new(0, 0.1, 0)
+    end
+    
+    return predictedPos
 end
 
--- // 最速ターゲット検索
-local function GetRageTarget()
-    local closest = nil
-    local shortestMouseDist = math.huge
+-- // 武器スキャナー (Noneバグ対策版)
+local function ScanWeapon()
+    local char = LocalPlayer.Character
+    if not char then return end
     
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
-            if getgenv().SwiftConfig.IgnoreTeam and player.Team == LocalPlayer.Team then continue end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        CurrentWeapon = tool.Name
+    else
+        -- 持ち替え中のモデル名を全スキャン
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("Model") and WeaponData[v.Name] then
+                CurrentWeapon = v.Name
+                break
+            end
+        end
+    end
+    
+    -- プロファイル適用
+    local profile = WeaponData[CurrentWeapon] or {Speed = 850, Prediction = 1.5, Gravity = true}
+    getgenv().SwiftSettings.ProjectileSpeed = profile.Speed
+    getgenv().SwiftSettings.PredictionScale = profile.Prediction
+end
+
+-- // ターゲット検索 (Ragebot用)
+local function GetBestTarget()
+    local target = nil
+    local dist = getgenv().SwiftSettings.FovSize
+    
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Humanoid") then
+            if p.Character.Humanoid.Health <= 0 then continue end
+            if getgenv().SwiftSettings.TeamCheck and p.Team == LocalPlayer.Team then continue end
             
-            local pos, onScreen = Camera:WorldToViewportPoint(player.Character.Head.Position)
-            if onScreen then
-                local mouseDist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
-                if mouseDist < shortestMouseDist then
-                    closest = player
-                    shortestMouseDist = mouseDist
+            local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
+            if vis then
+                local mag = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
+                if mag < dist then
+                    target = p
+                    dist = mag
                 end
             end
         end
     end
-    return closest
-end
--- // Part 2: Deep Packet Manipulation & Void Stabilization
-local Network = nil
--- Rivalsの通信モジュールを特定（武器発射イベントの取得）
-for _, v in pairs(game:GetDescendants()) do
-    if v:IsA("RemoteEvent") and (v.Name:find("Fire") or v.Name:find("Shoot")) then
-        Network = v
-    end
+    return target
 end
 
--- [[ 弾道シミュレーション・オーバーライド ]]
-local function BulletVelocityCalc(targetPos, startPos)
-    local direction = targetPos - startPos
-    local distance = direction.Magnitude
-    -- 重力を無視させるための初速ブースト（Projectile Swiftの真髄）
-    return direction.Unit * getgenv().SwiftConfig.ProjectileSpeed * 10
-end
-
--- // __namecall フックの再構築（最優先割り込み）
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+-- // 通信オーバーライド (FireServer Hook)
+local old
+old = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
     
-    -- 自分のスクリプト以外からの通信を全て監視
-    if not checkcaller() and method == "FireServer" then
-        local remoteName = self.Name
-        
-        -- 弓、ダガー、スリングショット、さらにはランチャー系の通信を検知
-        if remoteName:find("Shoot") or remoteName:find("Fire") or remoteName:find("Throw") or remoteName:find("Projectile") then
-            local target = GetRageTarget()
-            
-            if target and target.Character and target.Character:FindFirstChild("Head") then
-                local predictedPos = GetPredictedPosition(target)
+    if getgenv().SwiftSettings.Enabled and not checkcaller() and method == "FireServer" then
+        if self.Name:find("Shoot") or self.Name:find("Fire") or self.Name:find("Throw") then
+            local t = GetBestTarget()
+            if t then
+                local pred = CalculatePrediction(t)
+                local start = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")) and LocalPlayer.Character.Head.Position or Camera.CFrame.Position
                 
-                if predictedPos then
-                    -- [[ Void Orbit 補正 ]]
-                    -- 自分がどれだけ回転していても、発射起点を「頭」に固定し、ベクトルを未来位置へ向ける
-                    local startPos = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")) and LocalPlayer.Character.Head.Position or Camera.CFrame.Position
-                    
+                if pred then
                     for i, arg in pairs(args) do
-                        -- ベクトル引数（方向）を見つけて書き換え
                         if typeof(arg) == "Vector3" then
-                            args[i] = BulletVelocityCalc(predictedPos, startPos)
+                            args[i] = (pred - start).Unit * getgenv().SwiftSettings.ProjectileSpeed * 10
                         end
-                        -- CFrame引数（向き）を見つけて書き換え
                         if typeof(arg) == "CFrame" then
-                            args[i] = CFrame.new(startPos, predictedPos)
-                        end
-                        -- Raycast結果が含まれる場合の補正
-                        if typeof(arg) == "table" and arg.Hit then
-                            arg.Hit = target.Character.Head
-                            arg.Pos = predictedPos
+                            args[i] = CFrame.new(start, pred)
                         end
                     end
-                    
-                    -- 書き換えたパケットを送信
-                    return oldNamecall(self, unpack(args))
+                    return old(self, unpack(args))
                 end
             end
         end
     end
-    return oldNamecall(self, ...)
+    return old(self, ...)
 end)
 
--- // アンチ・バンプ（Void中のガクつきによる誤射防止）
-RunService.Heartbeat:Connect(function()
-    if getgenv().SwiftConfig.Enabled and LocalPlayer.Character then
-        for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
-            if v:IsA("BasePart") then
-                v.CanCollide = false -- 衝突判定を消してVoid中の弾きを防止
-            end
-        end
-    end
-end)
-
-print("🎯 Part 2: Packet Interceptor & Void Stabilizer Active.")
--- // Part 3: Weapon Auto-Scanner & Final UI Integration
-local CurrentWeapon = "None"
-
--- 武器ごとの詳細プロファイル（弾速・予測強度）
-local WeaponProfiles = {
-    ["Slingshot"] = {Speed = 450, Prediction = 1.2, Gravity = true},
-    ["Bow"] = {Speed = 380, Prediction = 1.8, Gravity = true},
-    ["Dagger"] = {Speed = 600, Prediction = 1.0, Gravity = false},
-    ["RPG"] = {Speed = 300, Prediction = 2.5, Gravity = false},
-    ["Default"] = {Speed = 850, Prediction = 1.5, Gravity = true}
-}
-
--- [[ 武器スキャン・ループ ]]
-task.spawn(function()
-    while task.wait(0.5) do
-        if LocalPlayer.Character then
-            local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-            if tool then
-                CurrentWeapon = tool.Name
-                local profile = WeaponProfiles[CurrentWeapon] or WeaponProfiles["Default"]
-                getgenv().SwiftConfig.ProjectileSpeed = profile.Speed
-                getgenv().SwiftConfig.VelocityMult = profile.Prediction
-            end
-        end
-    end
-end)
-
--- [[ 最終UI構築 (Delta / PC 両対応) ]]
+-- // UI構築 (Delta対応・高機能版)
 local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-local MainFrame = Instance.new("Frame", ScreenGui)
-local Title = Instance.new("TextLabel", MainFrame)
-local Toggle = Instance.new("TextButton", MainFrame)
-local Info = Instance.new("TextLabel", MainFrame)
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 220, 0, 130)
+Frame.Position = UDim2.new(0.05, 0, 0.2, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Frame.Active = true
+Frame.Draggable = true
 
-MainFrame.Size = UDim2.new(0, 200, 0, 100)
-MainFrame.Position = UDim2.new(0.05, 0, 0.15, 0) -- 他のUIと被らない位置
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
-
-local UICorner = Instance.new("UICorner", MainFrame)
-
+local Title = Instance.new("TextLabel", Frame)
 Title.Size = UDim2.new(1, 0, 0, 30)
-Title.Text = "tested internal v3"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 14
+Title.Text = "tested internal | RAGE v3.2"
+Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Title.TextColor3 = Color3.new(1, 1, 1)
 
-Toggle.Size = UDim2.new(0.9, 0, 0, 35)
-Toggle.Position = UDim2.new(0.05, 0, 0.35, 0)
-Toggle.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Toggle.Text = "Projectile Swift: ON"
-Toggle.TextColor3 = Color3.fromRGB(0, 255, 150)
-Toggle.Font = Enum.Font.Gotham
-Toggle.TextSize = 14
+local Log = Instance.new("TextLabel", Frame)
+Log.Size = UDim2.new(1, -10, 1, -40)
+Log.Position = UDim2.new(0, 5, 0, 35)
+Log.BackgroundTransparency = 1
+Log.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+Log.TextXAlignment = Enum.TextXAlignment.Left
+Log.TextYAlignment = Enum.TextYAlignment.Top
+Log.TextSize = 12
 
-Info.Size = UDim2.new(1, 0, 0, 25)
-Info.Position = UDim2.new(0, 0, 0.75, 0)
-Info.Text = "Detecting Weapon..."
-Info.TextColor3 = Color3.fromRGB(180, 180, 180)
-Info.BackgroundTransparency = 1
-Info.TextSize = 10
-
-Toggle.MouseButton1Click:Connect(function()
-    getgenv().SwiftConfig.Enabled = not getgenv().SwiftConfig.Enabled
-    Toggle.Text = getgenv().SwiftConfig.Enabled and "Projectile Swift: ON" or "Projectile Swift: OFF"
-    Toggle.TextColor3 = getgenv().SwiftConfig.Enabled and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 80, 80)
-end)
-
--- 情報更新ループ
+-- // メインループ
 task.spawn(function()
-    while task.wait(0.1) do
-        Info.Text = "Weapon: " .. CurrentWeapon .. " | Dist: " .. (GetRageTarget() and math.floor((GetRageTarget().Character.Head.Position - Camera.CFrame.Position).Magnitude) or 0) .. "s"
+    while task.wait(0.2) do
+        ScanWeapon()
+        local t = GetBestTarget()
+        Log.Text = string.format(
+            "Weapon: %s\nSpeed: %d\nTarget: %s\nStatus: %s",
+            CurrentWeapon,
+            getgenv().SwiftSettings.ProjectileSpeed,
+            t and t.Name or "Searching...",
+            getgenv().SwiftSettings.Enabled and "READY" or "OFF"
+        )
     end
 end)
 
-print("🌌 [tested internal] ALL SYSTEMS GO. Rage-Master v3 Activated.")
+print("🌌 Full Specification Rage-Master Loaded. Destroy them, Paisen.")
