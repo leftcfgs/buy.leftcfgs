@@ -1,70 +1,49 @@
--- [[ tested internal: Delta & UE Compatibility Edition ]]
-print("🚀 Delta Engine Initializing...")
-
+-- [[ tested internal: Void & Rage Projectile Engine ]]
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
 
--- DeltaでUIが出ないのを防ぐために親をPlayerGuiにする
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "TestedSwiftDelta"
-ScreenGui.Parent = (game:GetService("RunService"):IsStudio() and Players.LocalPlayer.PlayerGui or game:GetService("CoreGui"))
-ScreenGui.ResetOnSpawn = false
+getgenv().SwiftEnabled = true -- 最初からONに設定
 
--- // Configuration
-getgenv().SwiftEnabled = false
+-- 最も近い敵を自動ロック（Rage用）
+local function GetRageTarget()
+    local closest = nil
+    local dist = math.huge
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") and v.Team ~= LocalPlayer.Team then
+            local d = (v.Character.Head.Position - LocalPlayer.Character.Head.Position).Magnitude
+            if d < dist then
+                closest = v
+                dist = d
+            end
+        end
+    end
+    return closest
+end
 
--- // UI (Deltaでも操作しやすいサイズ)
-local Main = Instance.new("Frame")
-Main.Parent = ScreenGui
-Main.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Main.Position = UDim2.new(0.1, 0, 0.2, 0)
-Main.Size = UDim2.new(0, 150, 0, 40)
-Main.Active = true
-Main.Draggable = true -- スマホだとドラッグしにくいが一応
-
-local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Parent = Main
-ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-ToggleBtn.Text = "SWIFT: OFF"
-ToggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-ToggleBtn.Font = Enum.Font.GothamBold
-ToggleBtn.TextSize = 14
-
-ToggleBtn.MouseButton1Click:Connect(function()
-    getgenv().SwiftEnabled = not getgenv().SwiftEnabled
-    ToggleBtn.Text = getgenv().SwiftEnabled and "SWIFT: ON" or "SWIFT: OFF"
-    ToggleBtn.TextColor3 = getgenv().SwiftEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
-end)
-
--- // Deltaでも動くように簡略化したパケット補正
+-- // Rage-Void Packet Hook
 local old
 old = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
 
     if getgenv().SwiftEnabled and method == "FireServer" and not checkcaller() then
-        -- Rivalsの弓・スリング・ダガーの検知
-        if self.Name:find("Fire") or self.Name:find("Shoot") or self.Name:find("Throw") then
-            -- ターゲット取得（一番近い敵）
-            local target = nil
-            local dist = 300
-            for _, v in pairs(Players:GetPlayers()) do
-                if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") then
-                    local pos, vis = Camera:WorldToViewportPoint(v.Character.Head.Position)
-                    if vis then
-                        local mag = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
-                        if mag < dist then target = v; dist = mag end
-                    end
-                end
-            end
-
-            if target then
+        -- Rivalsの全ての遠距離攻撃リモートを網羅
+        if self.Name:find("Shoot") or self.Name:find("Fire") or self.Name:find("Throw") or self.Name:find("Projectile") then
+            local t = GetRageTarget()
+            if t and t.Character then
+                local head = t.Character.Head
+                
+                -- [[ Void-Hit Logic ]]
+                -- 自分の現在位置(Void中)を無視し、ターゲットの頭に直接弾を生成する
                 for i, arg in pairs(args) do
                     if typeof(arg) == "Vector3" then
-                        args[i] = (target.Character.Head.Position - Camera.CFrame.Position).Unit * 5000
+                        -- 方向ベクトルを「ターゲットの目の前」に固定
+                        args[i] = (head.Position - (head.Position + Vector3.new(0, 0.1, 0))).Unit * 10000
+                    end
+                    -- CFrameが含まれるパケットの場合も、ターゲット方向へ強制向ける
+                    if typeof(arg) == "CFrame" then
+                        args[i] = CFrame.new(head.Position + Vector3.new(0, 1, 0), head.Position)
                     end
                 end
                 return old(self, unpack(args))
@@ -74,4 +53,17 @@ old = hookmetamethod(game, "__namecall", function(self, ...)
     return old(self, ...)
 end)
 
-print("✅ Delta Swift Loaded!")
+-- Deltaでも見やすい簡易通知UI
+local sg = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local f = Instance.new("Frame", sg)
+f.Size = UDim2.new(0, 120, 0, 30)
+f.Position = UDim2.new(0.1, 0, 0.1, 0)
+f.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+local t = Instance.new("TextLabel", f)
+t.Size = UDim2.new(1, 0, 1, 0)
+t.Text = "RAGE SWIFT: ON"
+t.TextColor3 = Color3.fromRGB(0, 255, 120)
+t.BackgroundTransparency = 1
+t.TextSize = 12
+
+print("🌌 Void-Hit Engine Loaded: Ready for Ragebot!")
