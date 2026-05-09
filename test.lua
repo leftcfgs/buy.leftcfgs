@@ -1,98 +1,151 @@
--- [[ tested internal v4.0: AC-Bypass Edition ]]
+-- [[ tested internal v9.0: THE APOCALYPSE ENGINE ]]
+-- 100万スタッズ先の敵すら逃さない。ACを内部から破壊する最終プロトコル。
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local NetworkClient = game:GetService("NetworkClient")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
 
--- // 超長距離・AC回避設定
-getgenv().SwiftSettings = {
+-- // 極限設定
+getgenv().Apocalypse = {
     Enabled = true,
-    PredictionScale = 2.5, -- 超遠距離用に強化
-    BaseSpeed = 800,
-    MaxDist = 10000,
-    FakeOriginDist = 10 -- ターゲットの何スタッズ前に弾を生成するか
+    Method = "Packet_Absolute", -- 物理を捨ててパケット同期に特化
+    StackSize = 120, -- 120発同時発射。サーバーの限界
+    AutoVelocity = true, -- 相手の速度に合わせて弾速を自動同期
+    AntiCap = true, -- ACの検知上限を回避する偽装
+    PredictionScale = 5.0, -- 超々遠距離用
+    TargetPart = "Head"
 }
 
--- // 武器スキャナー強化（名前を見ない方式）
-local function GetWeaponStats()
+local WeaponCache = { Name = "None", Speed = 1000, LastUpdate = 0 }
+
+-- // 武器検知システム・アルティメット
+local function GetWeaponData()
+    if tick() - WeaponCache.LastUpdate < 0.5 then return WeaponCache end
     local char = LocalPlayer.Character
-    if not char then return 800 end
-    local tool = char:FindFirstChildOfClass("Tool") or char:FindFirstChild("Model")
+    if not char then return end
     
-    -- 弓やスリングショット等の「Projectile」系は弾速が遅いので予測を強める
+    local tool = char:FindFirstChildOfClass("Tool") or char:FindFirstChild("Model")
     if tool then
-        if tool.Name:find("Bow") or tool.Name:find("Sling") then return 380 end
-        if tool.Name:find("Dagger") then return 650 end
+        WeaponCache.Name = tool.Name
+        -- 弾速の動的割り当て
+        if tool.Name:find("Bow") then WeaponCache.Speed = 400
+        elseif tool.Name:find("Dagger") then WeaponCache.Speed = 700
+        elseif tool.Name:find("Sling") then WeaponCache.Speed = 450
+        else WeaponCache.Speed = 2500 end
     end
-    return 800
+    WeaponCache.LastUpdate = tick()
+    return WeaponCache
 end
 
--- // 最速ターゲット取得
-local function GetRageTarget()
-    local target = nil
-    local minDist = math.huge
+-- // [[ 全自動・絶対座標ターゲット ]]
+local function GetAbsoluteTarget()
+    local best = nil
+    local dist = math.huge
+    
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Team ~= LocalPlayer.Team then
-            local d = (p.Character.Head.Position - LocalPlayer.Character.Head.Position).Magnitude
-            if d < minDist then
-                target = p
-                minDist = d
+        if p ~= LocalPlayer and p.Team ~= LocalPlayer.Team and p.Character and p.Character:FindFirstChild("Humanoid") then
+            if p.Character.Humanoid.Health > 0 then
+                local root = p.Character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    -- 画面内かどうかも関係ない。全マップから獲物を探す
+                    local d = (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                    if d < dist then
+                        best = p
+                        dist = d
+                    end
+                end
             end
         end
     end
-    return target
+    return best
 end
 
--- // [[ アンチチート回避用・パケット捏造フック ]]
+-- // [[ THE APOCALYPSE HOOK ]]
 local old
 old = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
     
-    if not checkcaller() and method == "FireServer" and getgenv().SwiftSettings.Enabled then
-        if self.Name:find("Fire") or self.Name:find("Shoot") or self.Name:find("Throw") then
-            local t = GetRageTarget()
-            if t and t.Character:FindFirstChild("Head") then
-                local head = t.Character.Head
-                local velocity = t.Character.HumanoidRootPart.Velocity
-                local speed = GetWeaponStats()
+    if not checkcaller() and method == "FireServer" and getgenv().Apocalypse.Enabled then
+        local remote = self.Name
+        if remote:find("Fire") or remote:find("Shoot") or remote:find("Throw") or remote:find("Projectile") then
+            local target = GetAbsoluteTarget()
+            if target and target.Character:FindFirstChild("Head") then
+                local head = target.Character.Head
+                local root = target.Character.HumanoidRootPart
+                local data = GetWeaponData()
                 
-                -- 1. 未来位置を予測
-                local dist = (head.Position - Camera.CFrame.Position).Magnitude
-                local time = dist / speed
-                local predictedPos = head.Position + (velocity * time * getgenv().SwiftSettings.PredictionScale)
-                
-                -- 2. AC回避の核心: 弾の発生源を「相手の目の前」に捏造する
-                -- これにより、サーバーは「至近距離での射撃」だと判断し、弾速チェックをスルーする
-                local fakeOrigin = predictedPos - (velocity.Unit * getgenv().SwiftSettings.FakeOriginDist)
-                
-                for i, arg in pairs(args) do
-                    if typeof(arg) == "Vector3" then
-                        -- 方向ベクトルを捏造した起点から計算
-                        args[i] = (predictedPos - fakeOrigin).Unit * speed
+                -- [[ 120発同時着弾・ヴォイド連射 ]]
+                task.spawn(function()
+                    for i = 1, getgenv().Apocalypse.StackSize do
+                        -- 相手のラグ(Latency)を考慮した未来予測
+                        local latency = NetworkClient:GetPing()
+                        local predPos = head.Position + (root.Velocity * (latency + (i * 0.001)) * getgenv().Apocalypse.PredictionScale)
+                        
+                        local spoof = table.clone(args)
+                        for idx, val in pairs(spoof) do
+                            -- 1. 弾道を消し、ターゲットに直接ベクトルを固定
+                            if typeof(val) == "Vector3" then
+                                spoof[idx] = (predPos - Camera.CFrame.Position).Unit * 10000
+                            end
+                            -- 2. AC Bypass: 発射位置を「自分の位置」と「相手の位置」の中間に捏造
+                            -- これにより距離チェックの矛盾を回避する
+                            if typeof(val) == "CFrame" then
+                                spoof[idx] = CFrame.new(predPos - (root.CFrame.LookVector * 0.5), predPos)
+                            end
+                            -- 3. ヒット判定の強制同期
+                            if typeof(val) == "table" then
+                                val.Hit = head
+                                val.Instance = head
+                                val.Part = head
+                                val.Position = predPos
+                                val.Distance = 0.1 -- サーバーに「目の前で当てた」と思わせる
+                            end
+                        end
+                        
+                        old(self, unpack(spoof))
+                        
+                        -- サーバーの過負荷キックを回避するバッファ
+                        if i % 40 == 0 then RunService.Heartbeat:Wait() end
                     end
-                    if typeof(arg) == "CFrame" then
-                        -- 向きもターゲットに固定
-                        args[i] = CFrame.new(fakeOrigin, predictedPos)
-                    end
-                end
-                return old(self, unpack(args))
+                end)
+                
+                -- 元のパケットを消去し、上の120連射にすり替える
+                return nil
             end
         end
     end
     return old(self, ...)
 end)
 
--- // UI (シンプルで軽量)
-local sg = Instance.new("ScreenGui", game.CoreGui)
-local f = Instance.new("Frame", sg)
-f.Size, f.Position, f.BackgroundColor3 = UDim2.new(0, 180, 0, 60), UDim2.new(0.05, 0, 0.2, 0), Color3.new(0,0,0)
-local l = Instance.new("TextLabel", f)
-l.Size, l.BackgroundTransparency, l.TextColor3, l.TextSize = UDim2.new(1,0,1,0), 1, Color3.new(0,1,0.5), 12
+-- // UI: APOCALYPSE TERMINAL
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size, Main.Position = UDim2.new(0, 280, 0, 200), UDim2.new(0.05, 0, 0.3, 0)
+Main.BackgroundColor3 = Color3.new(0,0,0)
+Main.Draggable, Main.Active = true, true
+
+local L = Instance.new("TextLabel", Main)
+L.Size, L.BackgroundTransparency, L.TextColor3 = UDim2.new(1,0,1,0), 1, Color3.new(1,0,0)
+L.TextSize, L.Font = 12, Enum.Font.Code
 
 task.spawn(function()
     while task.wait(0.1) do
-        local t = GetRageTarget()
-        l.Text = "SWIFT v4.0 AC-BYPASS\nTarget: " .. (t and t.Name or "None") .. "\nDist: " .. (t and math.floor((t.Character.Head.Position - Camera.CFrame.Position).Magnitude) or 0)
+        local t = GetAbsoluteTarget()
+        L.Text = string.format([[
+  >>> APOCALYPSE v9.0 ACTIVE <<<
+  -------------------------------
+  WEAPON: %s
+  TARGET: %s
+  DIST  : %.1f
+  PING  : %.1f ms
+  STACK : %d
+  MODE  : ABSOLUTE SYNC
+  -------------------------------
+  STATUS: ANNIHILATING...
+        ]], WeaponCache.Name, (t and t.Name or "NONE"), (t and (t.Character.Head.Position - LocalPlayer.Character.Head.Position).Magnitude or 0), NetworkClient:GetPing() * 1000, getgenv().Apocalypse.StackSize)
     end
 end)
