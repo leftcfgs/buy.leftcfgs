@@ -1,76 +1,56 @@
--- [[ tested internal: Projectile Swift Only ]]
+-- [[ tested internal: Delta & UE Compatibility Edition ]]
+print("🚀 Delta Engine Initializing...")
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
+-- DeltaでUIが出ないのを防ぐために親をPlayerGuiにする
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TestedSwiftDelta"
+ScreenGui.Parent = (game:GetService("RunService"):IsStudio() and Players.LocalPlayer.PlayerGui or game:GetService("CoreGui"))
+ScreenGui.ResetOnSpawn = false
+
 -- // Configuration
 getgenv().SwiftEnabled = false
 
--- // UI Creation
-local ScreenGui = Instance.new("ScreenGui")
+-- // UI (Deltaでも操作しやすいサイズ)
 local Main = Instance.new("Frame")
-local ToggleBtn = Instance.new("TextButton")
-local UICorner = Instance.new("UICorner")
-local Status = Instance.new("Frame")
-
-ScreenGui.Name = "TestedInternal_Swift"
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-Main.Name = "Main"
 Main.Parent = ScreenGui
-Main.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Main.Position = UDim2.new(0.05, 0, 0.4, 0) -- 画面左側に配置（UEの邪魔にならない位置）
-Main.Size = UDim2.new(0, 180, 0, 50)
-Main.Draggable = true
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Main.Position = UDim2.new(0.1, 0, 0.2, 0)
+Main.Size = UDim2.new(0, 150, 0, 40)
 Main.Active = true
+Main.Draggable = true -- スマホだとドラッグしにくいが一応
 
-local MCorner = Instance.new("UICorner")
-MCorner.CornerRadius = UDim.new(0, 8)
-MCorner.Parent = Main
-
-ToggleBtn.Name = "ToggleBtn"
+local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Parent = Main
+ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-ToggleBtn.Position = UDim2.new(0, 5, 0, 5)
-ToggleBtn.Size = UDim2.new(1, -10, 1, -10)
+ToggleBtn.Text = "SWIFT: OFF"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
 ToggleBtn.Font = Enum.Font.GothamBold
-ToggleBtn.Text = "Projectile Swift"
-ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ToggleBtn.TextSize = 14
 
-local TCorner = Instance.new("UICorner")
-TCorner.Parent = ToggleBtn
-
-Status.Name = "Status"
-Status.Parent = ToggleBtn
-Status.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-Status.Position = UDim2.new(1, -20, 0.5, -5)
-Status.Size = UDim2.new(0, 10, 0, 10)
-
-local SCorner = Instance.new("UICorner")
-SCorner.CornerRadius = UDim.new(1, 0)
-SCorner.Parent = Status
-
--- // Toggle Logic
 ToggleBtn.MouseButton1Click:Connect(function()
     getgenv().SwiftEnabled = not getgenv().SwiftEnabled
-    Status.BackgroundColor3 = getgenv().SwiftEnabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
-    print("Swift Mode: ", getgenv().SwiftEnabled)
+    ToggleBtn.Text = getgenv().SwiftEnabled and "SWIFT: ON" or "SWIFT: OFF"
+    ToggleBtn.TextColor3 = getgenv().SwiftEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
 end)
 
--- // Heart of Swift (Packet Hook)
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+-- // Deltaでも動くように簡略化したパケット補正
+local old
+old = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
 
-    if getgenv().SwiftEnabled and not checkcaller() and method == "FireServer" then
-        if self.Name == "ShootProjectile" or self.Name == "ThrowDagger" or self.Name == "FireSlingshot" or self.Name == "Fire" then
-            -- ターゲット取得
+    if getgenv().SwiftEnabled and method == "FireServer" and not checkcaller() then
+        -- Rivalsの弓・スリング・ダガーの検知
+        if self.Name:find("Fire") or self.Name:find("Shoot") or self.Name:find("Throw") then
+            -- ターゲット取得（一番近い敵）
             local target = nil
-            local dist = 500
+            local dist = 300
             for _, v in pairs(Players:GetPlayers()) do
                 if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") then
                     local pos, vis = Camera:WorldToViewportPoint(v.Character.Head.Position)
@@ -81,18 +61,17 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 end
             end
 
-            -- 弾道書き換え
-            if target and target.Character:FindFirstChild("Head") then
+            if target then
                 for i, arg in pairs(args) do
                     if typeof(arg) == "Vector3" then
-                        args[i] = (target.Character.Head.Position - Camera.CFrame.Position).Unit * 10000
+                        args[i] = (target.Character.Head.Position - Camera.CFrame.Position).Unit * 5000
                     end
                 end
-                return oldNamecall(self, unpack(args))
+                return old(self, unpack(args))
             end
         end
     end
-    return oldNamecall(self, ...)
+    return old(self, ...)
 end)
 
-print("🚀 tested internal - Swift UI Loaded!")
+print("✅ Delta Swift Loaded!")
