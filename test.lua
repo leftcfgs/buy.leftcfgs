@@ -1,151 +1,119 @@
--- [[ tested internal v9.0: THE APOCALYPSE ENGINE ]]
--- 100万スタッズ先の敵すら逃さない。ACを内部から破壊する最終プロトコル。
+-- [[ tested internal v10.0: THE SKY-STRIKER (Universal Edition) ]]
+-- 弓・ダガー・銃、全ての武器に対応した「真上テレポート」必中スクリプト。
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local NetworkClient = game:GetService("NetworkClient")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
 
--- // 極限設定
-getgenv().Apocalypse = {
+getgenv().SkyStriker = {
     Enabled = true,
-    Method = "Packet_Absolute", -- 物理を捨ててパケット同期に特化
-    StackSize = 120, -- 120発同時発射。サーバーの限界
-    AutoVelocity = true, -- 相手の速度に合わせて弾速を自動同期
-    AntiCap = true, -- ACの検知上限を回避する偽装
-    PredictionScale = 5.0, -- 超々遠距離用
-    TargetPart = "Head"
+    Height = 400, -- 相手の400スタッズ上に発射点を捏造
+    Stack = 80, -- 連射数（武器を選ばず一瞬で溶かす）
+    Method = "Global_Sync",
+    AutoTarget = true
 }
 
-local WeaponCache = { Name = "None", Speed = 1000, LastUpdate = 0 }
-
--- // 武器検知システム・アルティメット
-local function GetWeaponData()
-    if tick() - WeaponCache.LastUpdate < 0.5 then return WeaponCache end
-    local char = LocalPlayer.Character
-    if not char then return end
-    
-    local tool = char:FindFirstChildOfClass("Tool") or char:FindFirstChild("Model")
-    if tool then
-        WeaponCache.Name = tool.Name
-        -- 弾速の動的割り当て
-        if tool.Name:find("Bow") then WeaponCache.Speed = 400
-        elseif tool.Name:find("Dagger") then WeaponCache.Speed = 700
-        elseif tool.Name:find("Sling") then WeaponCache.Speed = 450
-        else WeaponCache.Speed = 2500 end
-    end
-    WeaponCache.LastUpdate = tick()
-    return WeaponCache
-end
-
--- // [[ 全自動・絶対座標ターゲット ]]
-local function GetAbsoluteTarget()
-    local best = nil
-    local dist = math.huge
-    
+-- // 全マップ対応・ターゲット取得
+local function GetAnnihilationTarget()
+    local target = nil
+    local shortestDist = math.huge
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Team ~= LocalPlayer.Team and p.Character and p.Character:FindFirstChild("Humanoid") then
             if p.Character.Humanoid.Health > 0 then
                 local root = p.Character:FindFirstChild("HumanoidRootPart")
                 if root then
-                    -- 画面内かどうかも関係ない。全マップから獲物を探す
-                    local d = (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                    if d < dist then
-                        best = p
-                        dist = d
+                    -- 距離に関係なく、最も近い敵をロックオン
+                    local d = (root.Position - LocalPlayer.Character.Head.Position).Magnitude
+                    if d < shortestDist then
+                        target = p
+                        shortestDist = d
                     end
                 end
             end
         end
     end
-    return best
+    return target
 end
 
--- // [[ THE APOCALYPSE HOOK ]]
-local old
-old = hookmetamethod(game, "__namecall", function(self, ...)
+-- // [[ SKY-STRIKE HOOK SYSTEM ]]
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
     
-    if not checkcaller() and method == "FireServer" and getgenv().Apocalypse.Enabled then
+    if not checkcaller() and method == "FireServer" and getgenv().SkyStriker.Enabled then
         local remote = self.Name
-        if remote:find("Fire") or remote:find("Shoot") or remote:find("Throw") or remote:find("Projectile") then
-            local target = GetAbsoluteTarget()
-            if target and target.Character:FindFirstChild("Head") then
-                local head = target.Character.Head
-                local root = target.Character.HumanoidRootPart
-                local data = GetWeaponData()
+        -- 射撃・投擲・ヒット判定、全ての通信をキャッチ
+        if remote:find("Fire") or remote:find("Shoot") or remote:find("Throw") or remote:find("Hit") or remote:find("Projectile") then
+            local t = GetAnnihilationTarget()
+            if t and t.Character:FindFirstChild("Head") then
+                local head = t.Character.Head
+                local targetPos = head.Position
                 
-                -- [[ 120発同時着弾・ヴォイド連射 ]]
+                -- [[ 抹茶（Matcha）式・垂直落下ボム ]]
                 task.spawn(function()
-                    for i = 1, getgenv().Apocalypse.StackSize do
-                        -- 相手のラグ(Latency)を考慮した未来予測
-                        local latency = NetworkClient:GetPing()
-                        local predPos = head.Position + (root.Velocity * (latency + (i * 0.001)) * getgenv().Apocalypse.PredictionScale)
+                    for i = 1, getgenv().SkyStriker.Stack do
+                        local spoofArgs = table.clone(args)
+                        -- 相手の真上から弾を生成
+                        local skyPos = targetPos + Vector3.new(0, getgenv().SkyStriker.Height, 0)
                         
-                        local spoof = table.clone(args)
-                        for idx, val in pairs(spoof) do
-                            -- 1. 弾道を消し、ターゲットに直接ベクトルを固定
+                        for idx, val in pairs(spoofArgs) do
+                            -- ベクトルを「真下への超高速」に固定
                             if typeof(val) == "Vector3" then
-                                spoof[idx] = (predPos - Camera.CFrame.Position).Unit * 10000
+                                spoofArgs[idx] = Vector3.new(0, -1000, 0)
                             end
-                            -- 2. AC Bypass: 発射位置を「自分の位置」と「相手の位置」の中間に捏造
-                            -- これにより距離チェックの矛盾を回避する
+                            -- 発射位置を天界にセット
                             if typeof(val) == "CFrame" then
-                                spoof[idx] = CFrame.new(predPos - (root.CFrame.LookVector * 0.5), predPos)
+                                spoofArgs[idx] = CFrame.new(skyPos, targetPos)
                             end
-                            -- 3. ヒット判定の強制同期
+                            -- 判定データのテーブルがあれば「頭」に強制ヒット
                             if typeof(val) == "table" then
                                 val.Hit = head
                                 val.Instance = head
                                 val.Part = head
-                                val.Position = predPos
-                                val.Distance = 0.1 -- サーバーに「目の前で当てた」と思わせる
+                                val.Position = targetPos
+                                val.Distance = getgenv().SkyStriker.Height
                             end
                         end
                         
-                        old(self, unpack(spoof))
+                        -- 改竄パケット射出
+                        oldNamecall(self, unpack(spoofArgs))
                         
-                        -- サーバーの過負荷キックを回避するバッファ
-                        if i % 40 == 0 then RunService.Heartbeat:Wait() end
+                        -- 連射キック対策（30発おきに微休止）
+                        if i % 30 == 0 then RunService.Heartbeat:Wait() end
                     end
                 end)
                 
-                -- 元のパケットを消去し、上の120連射にすり替える
+                -- オリジナルのパケット（外れる可能性があるやつ）を消去
                 return nil
             end
         end
     end
-    return old(self, ...)
+    return oldNamecall(self, ...)
 end)
 
--- // UI: APOCALYPSE TERMINAL
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-local Main = Instance.new("Frame", ScreenGui)
-Main.Size, Main.Position = UDim2.new(0, 280, 0, 200), UDim2.new(0.05, 0, 0.3, 0)
-Main.BackgroundColor3 = Color3.new(0,0,0)
-Main.Draggable, Main.Active = true, true
-
-local L = Instance.new("TextLabel", Main)
-L.Size, L.BackgroundTransparency, L.TextColor3 = UDim2.new(1,0,1,0), 1, Color3.new(1,0,0)
-L.TextSize, L.Font = 12, Enum.Font.Code
+-- // UI: SKY-STRIKER MONITOR
+local sg = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local f = Instance.new("Frame", sg)
+f.Size, f.Position, f.BackgroundColor3 = UDim2.new(0, 240, 0, 110), UDim2.new(0.05, 0, 0.4, 0), Color3.new(0,0,0)
+local l = Instance.new("TextLabel", f)
+l.Size, l.BackgroundTransparency, l.TextColor3, l.TextSize = UDim2.new(1,0,1,0), 1, Color3.new(0.5, 1, 0), 13
 
 task.spawn(function()
     while task.wait(0.1) do
-        local t = GetAbsoluteTarget()
-        L.Text = string.format([[
-  >>> APOCALYPSE v9.0 ACTIVE <<<
-  -------------------------------
-  WEAPON: %s
+        local t = GetAnnihilationTarget()
+        l.Text = string.format([[
+  [ tested internal v10.0 ]
+  -------------------------
   TARGET: %s
-  DIST  : %.1f
-  PING  : %.1f ms
-  STACK : %d
-  MODE  : ABSOLUTE SYNC
-  -------------------------------
-  STATUS: ANNIHILATING...
-        ]], WeaponCache.Name, (t and t.Name or "NONE"), (t and (t.Character.Head.Position - LocalPlayer.Character.Head.Position).Magnitude or 0), NetworkClient:GetPing() * 1000, getgenv().Apocalypse.StackSize)
+  DIST  : %d
+  MODE  : SKY-TELEPORT
+  STACK : %dx PER CLICK
+  STATUS: DESTROYING...
+  -------------------------
+        ]], (t and t.Name or "NONE"), (t and (t.Character.Head.Position - LocalPlayer.Character.Head.Position).Magnitude or 0), getgenv().SkyStriker.Stack)
     end
 end)
+
+print("🚀 SKY-STRIKER v10.0 LOADED. Universal Domination Start.")
