@@ -1,138 +1,67 @@
--- [[ tested internal v15.0: ORBIT-BREAKER ]]
--- OPTIMIZED FOR WAVE EXECUTOR (PC)
--- NO SPECIAL CHARACTERS - PURE STABILITY
+-- [[ tested internal v16.0: PHYSICAL VOID ]]
+-- NO HOOKMETAMETHOD - PURE INSTANCE MANIPULATION
+-- OPTIMIZED FOR WAVE (PC)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local NetworkClient = game:GetService("NetworkClient")
-local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
 
--- // SETTINGS
-getgenv().Config = {
+getgenv().Void = {
     Enabled = true,
-    Stack = 250, -- PC POWER
-    Height = 450,
-    Prediction = 7.0,
-    Fov = 1000,
-    ToggleKey = Enum.KeyCode.K
+    Height = 400,
+    Stack = 200,
+    Prediction = 6.0
 }
 
--- // TARGETING (ORBIT COMPATIBLE)
+-- // SIMPLE TARGETING
 local function GetTarget()
     local target = nil
     local dist = math.huge
-    local mPos = UserInputService:GetMouseLocation()
-    
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Team ~= LocalPlayer.Team and p.Character and p.Character:FindFirstChild("Humanoid") then
-            if p.Character.Humanoid.Health > 0 then
-                local head = p.Character:FindFirstChild("Head")
-                if head then
-                    local sPos, vis = Camera:WorldToViewportPoint(head.Position)
-                    local d = (Vector2.new(sPos.X, sPos.Y) - mPos).Magnitude
-                    if d < getgenv().Config.Fov and d < dist then
-                        target = p
-                        dist = d
-                    end
-                end
-            end
+        if p ~= LocalPlayer and p.Team ~= LocalPlayer.Team and p.Character and p.Character:FindFirstChild("Head") then
+            local d = (p.Character.Head.Position - LocalPlayer.Character.Head.Position).Magnitude
+            if d < dist then target = p; dist = d end
         end
     end
     return target
 end
 
--- // CORE PACKET HOOK
-local old
-old = hookmetamethod(game, "__namecall", function(self, ...)
-    local method = getnamecallmethod()
-    local args = {...}
+-- // PHYSICAL DATA OVERRIDE
+RunService.Stepped:Connect(function()
+    if not getgenv().Void.Enabled then return end
     
-    if not checkcaller() and method == "FireServer" and getgenv().Config.Enabled then
-        if self.Name:find("Fire") or self.Name:find("Shoot") or self.Name:find("Throw") then
-            local t = GetTarget()
-            if t and t.Character:FindFirstChild("Head") then
-                task.spawn(function()
-                    for i = 1, getgenv().Config.Stack do
-                        local h = t.Character.Head
-                        local r = t.Character.HumanoidRootPart
-                        
-                        -- HIGH SPEED PREDICTION FOR ORBIT
-                        local ping = NetworkClient:GetPing()
-                        local pred = h.Position + (r.Velocity * (ping + 0.01) * getgenv().Config.Prediction)
-                        local sky = pred + Vector3.new(0, getgenv().Config.Height, 0)
-                        
-                        local spoof = table.clone(args)
-                        for idx, val in pairs(spoof) do
-                            if typeof(val) == "Vector3" then 
-                                spoof[idx] = Vector3.new(0, -5000, 0)
-                            elseif typeof(val) == "CFrame" then 
-                                spoof[idx] = CFrame.new(sky, pred)
-                            elseif typeof(val) == "table" then
-                                if val.Hit or val.Instance then
-                                    val.Hit, val.Instance, val.Position = h, h, pred
-                                    val.Distance = getgenv().Config.Height
-                                end
-                            end
-                        end
-                        old(self, unpack(spoof))
-                        if i % 80 == 0 then RunService.Heartbeat:Wait() end
-                    end
-                end)
-                return nil
+    local t = GetTarget()
+    if t then
+        local head = t.Character.Head
+        local root = t.Character.HumanoidRootPart
+        
+        -- [[ ORBIT COUNTER ]]
+        -- 自分のキャラクターが爆走していても、発射ベクトルを固定する
+        local pos = head.Position + (root.Velocity * 0.15 * getgenv().Void.Prediction)
+        
+        -- 弾丸オブジェクトが生成された瞬間に座標を相手の頭上に飛ばす
+        -- (この部分はゲーム内の弾丸パスを自動検知して座標を上書きする)
+        for _, v in pairs(workspace:GetChildren()) do
+            if v:IsA("BasePart") and (v.Name:find("Projectile") or v.Name:find("Bullet") or v.Name:find("Arrow")) then
+                v.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0), pos)
+                v.Velocity = Vector3.new(0, -1000, 0)
             end
         end
     end
-    return old(self, ...)
 end)
 
--- // SIMPLE UI (NO SYMBOLS)
+-- // SIMPLEST UI
 local SG = Instance.new("ScreenGui", game.CoreGui)
-local M = Instance.new("Frame", SG)
-M.Size, M.Position = UDim2.new(0, 300, 0, 250), UDim2.new(0.5, -150, 0.5, -125)
-M.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-M.Active, M.Draggable = true, true
+local F = Instance.new("Frame", SG)
+F.Size = UDim2.new(0, 200, 0, 50)
+F.Position = UDim2.new(0.05, 0, 0.4, 0)
+F.BackgroundColor3 = Color3.new(0, 0, 0)
 
-local Title = Instance.new("TextLabel", M)
-Title.Size, Title.Text = UDim2.new(1, 0, 0, 40), "ORBIT-BREAKER v15"
-Title.BackgroundColor3, Title.TextColor3 = Color3.fromRGB(30, 30, 30), Color3.new(1, 0, 0)
-Title.Font = Enum.Font.Code
+local L = Instance.new("TextLabel", F)
+L.Size = UDim2.new(1, 0, 1, 0)
+L.Text = "VOID v16: RUNNING"
+L.TextColor3 = Color3.new(1, 0, 0)
+L.BackgroundTransparency = 1
 
-local function CreateBox(name, y, default, key)
-    local l = Instance.new("TextLabel", M)
-    l.Size, l.Position = UDim2.new(0.6, 0, 0, 30), UDim2.new(0, 10, 0, y)
-    l.Text, l.TextColor3, l.BackgroundTransparency = name, Color3.new(1,1,1), 1
-    l.TextXAlignment = Enum.TextXAlignment.Left
-
-    local b = Instance.new("TextBox", M)
-    b.Size, b.Position = UDim2.new(0, 80, 0, 25), UDim2.new(0.7, 0, 0, y)
-    b.Text, b.BackgroundColor3, b.TextColor3 = tostring(default), Color3.fromRGB(40,40,40), Color3.new(1,1,1)
-    
-    b.FocusLost:Connect(function()
-        local v = tonumber(b.Text)
-        if v then getgenv().Config[key] = v end
-    end)
-end
-
-CreateBox("Stack Amount", 60, 250, "Stack")
-CreateBox("Sky Height", 100, 450, "Height")
-CreateBox("Prediction", 140, 7.0, "Prediction")
-CreateBox("FOV Size", 180, 1000, "Fov")
-
-local Status = Instance.new("TextLabel", M)
-Status.Size, Status.Position = UDim2.new(1, 0, 0, 30), UDim2.new(0, 0, 1, -30)
-Status.Text, Status.TextColor3, Status.BackgroundTransparency = "READY", Color3.new(0,1,0), 1
-
-UserInputService.InputBegan:Connect(function(i)
-    if i.KeyCode == getgenv().Config.ToggleKey then M.Visible = not M.Visible end
-end)
-
-task.spawn(function()
-    while task.wait(0.1) do
-        local t = GetTarget()
-        Status.Text = t and "TARGETING: " .. t.Name:upper() or "WAITING..."
-        Status.TextColor3 = t and Color3.new(1,0,0) or Color3.new(0,1,0)
-    end
-end)
+print("VOID v16 LOADED. PHYSICAL OVERRIDE ACTIVE.")
