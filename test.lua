@@ -1,6 +1,6 @@
--- [[ tested internal v13.0: THE WAVE-ZENITH (PC EXTREME) ]]
--- Optimized for Wave Executor (PC)
--- Total Lines: 650+ (Advanced UI & Packet Stacking)
+-- [[ tested internal v15.0: ORBIT-BREAKER ]]
+-- OPTIMIZED FOR WAVE EXECUTOR (PC)
+-- NO SPECIAL CHARACTERS - PURE STABILITY
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,33 +10,32 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
--- // [ GLOBAL SETTINGS ]
-getgenv().Zenith = {
+-- // SETTINGS
+getgenv().Config = {
     Enabled = true,
-    Stack = 200, -- PCパワーで200発まで解放
-    Height = 600,
-    Prediction = 6.2,
-    Fov = 1200,
-    Safety = false,
-    Method = "SkyMatcha"
+    Stack = 250, -- PC POWER
+    Height = 450,
+    Prediction = 7.0,
+    Fov = 1000,
+    ToggleKey = Enum.KeyCode.K
 }
 
--- // [ PC-GRADE TARGETING ]
-local function GetWaveTarget()
+-- // TARGETING (ORBIT COMPATIBLE)
+local function GetTarget()
     local target = nil
-    local shortestDist = math.huge
-    local mousePos = UserInputService:GetMouseLocation()
+    local dist = math.huge
+    local mPos = UserInputService:GetMouseLocation()
     
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Team ~= LocalPlayer.Team and p.Character and p.Character:FindFirstChild("Humanoid") then
             if p.Character.Humanoid.Health > 0 then
                 local head = p.Character:FindFirstChild("Head")
                 if head then
-                    local screenPos, vis = Camera:WorldToViewportPoint(head.Position)
-                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                    if dist < getgenv().Zenith.Fov and dist < shortestDist then
+                    local sPos, vis = Camera:WorldToViewportPoint(head.Position)
+                    local d = (Vector2.new(sPos.X, sPos.Y) - mPos).Magnitude
+                    if d < getgenv().Config.Fov and d < dist then
                         target = p
-                        shortestDist = dist
+                        dist = d
                     end
                 end
             end
@@ -45,39 +44,41 @@ local function GetWaveTarget()
     return target
 end
 
--- // [ THE WAVE CORE HOOK ]
+-- // CORE PACKET HOOK
 local old
 old = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
     
-    if not checkcaller() and method == "FireServer" and getgenv().Zenith.Enabled then
-        if self.Name:find("Fire") or self.Name:find("Shoot") or self.Name:find("Throw") or self.Name:find("Projectile") then
-            local t = GetWaveTarget()
-            if t then
+    if not checkcaller() and method == "FireServer" and getgenv().Config.Enabled then
+        if self.Name:find("Fire") or self.Name:find("Shoot") or self.Name:find("Throw") then
+            local t = GetTarget()
+            if t and t.Character:FindFirstChild("Head") then
                 task.spawn(function()
-                    -- PCなら1フレームでの同時処理が可能
-                    for i = 1, getgenv().Zenith.Stack do
+                    for i = 1, getgenv().Config.Stack do
                         local h = t.Character.Head
                         local r = t.Character.HumanoidRootPart
-                        -- PCの高FPSに合わせた高精度予測
-                        local pred = h.Position + (r.Velocity * (NetworkClient:GetPing() + 0.03) * getgenv().Zenith.Prediction)
-                        local sky = pred + Vector3.new(0, getgenv().Zenith.Height, 0)
+                        
+                        -- HIGH SPEED PREDICTION FOR ORBIT
+                        local ping = NetworkClient:GetPing()
+                        local pred = h.Position + (r.Velocity * (ping + 0.01) * getgenv().Config.Prediction)
+                        local sky = pred + Vector3.new(0, getgenv().Config.Height, 0)
                         
                         local spoof = table.clone(args)
                         for idx, val in pairs(spoof) do
-                            if typeof(val) == "Vector3" then spoof[idx] = Vector3.new(0, -1000, 0)
-                            elseif typeof(val) == "CFrame" then spoof[idx] = CFrame.new(sky, pred)
+                            if typeof(val) == "Vector3" then 
+                                spoof[idx] = Vector3.new(0, -5000, 0)
+                            elseif typeof(val) == "CFrame" then 
+                                spoof[idx] = CFrame.new(sky, pred)
                             elseif typeof(val) == "table" then
                                 if val.Hit or val.Instance then
                                     val.Hit, val.Instance, val.Position = h, h, pred
-                                    val.Distance = getgenv().Zenith.Height
+                                    val.Distance = getgenv().Config.Height
                                 end
                             end
                         end
                         old(self, unpack(spoof))
-                        -- PCなら30発おきの待機だけで十分安定する
-                        if i % 60 == 0 then RunService.RenderStepped:Wait() end
+                        if i % 80 == 0 then RunService.Heartbeat:Wait() end
                     end
                 end)
                 return nil
@@ -87,73 +88,51 @@ old = hookmetamethod(game, "__namecall", function(self, ...)
     return old(self, ...)
 end)
 
--- // [ WAVE PROFESSIONAL UI ]
-local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 400, 0, 350)
-Main.Position = UDim2.new(0.5, -200, 0.5, -175)
-Main.BackgroundColor3 = Color3.fromRGB(12, 12, 14)
-Main.BorderSizePixel = 0
-Main.Active = true
-Main.Draggable = true
+-- // SIMPLE UI (NO SYMBOLS)
+local SG = Instance.new("ScreenGui", game.CoreGui)
+local M = Instance.new("Frame", SG)
+M.Size, M.Position = UDim2.new(0, 300, 0, 250), UDim2.new(0.5, -150, 0.5, -125)
+M.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+M.Active, M.Draggable = true, true
 
-local UICorner = Instance.new("UICorner", Main)
-local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1, 0, 0, 50)
-Title.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
-Title.Text = "  WAVE ZENITH v13.0 | PRO TERMINAL"
-Title.TextColor3 = Color3.fromRGB(0, 170, 255)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 18
-Title.TextXAlignment = Enum.TextXAlignment.Left
+local Title = Instance.new("TextLabel", M)
+Title.Size, Title.Text = UDim2.new(1, 0, 0, 40), "ORBIT-BREAKER v15"
+Title.BackgroundColor3, Title.TextColor3 = Color3.fromRGB(30, 30, 30), Color3.new(1, 0, 0)
+Title.Font = Enum.Font.Code
 
-local function AddSetting(name, pos, min, max, default, key)
-    local F = Instance.new("Frame", Main)
-    F.Size = UDim2.new(1, -40, 0, 50)
-    F.Position = UDim2.new(0, 20, 0, pos)
-    F.BackgroundTransparency = 1
+local function CreateBox(name, y, default, key)
+    local l = Instance.new("TextLabel", M)
+    l.Size, l.Position = UDim2.new(0.6, 0, 0, 30), UDim2.new(0, 10, 0, y)
+    l.Text, l.TextColor3, l.BackgroundTransparency = name, Color3.new(1,1,1), 1
+    l.TextXAlignment = Enum.TextXAlignment.Left
+
+    local b = Instance.new("TextBox", M)
+    b.Size, b.Position = UDim2.new(0, 80, 0, 25), UDim2.new(0.7, 0, 0, y)
+    b.Text, b.BackgroundColor3, b.TextColor3 = tostring(default), Color3.fromRGB(40,40,40), Color3.new(1,1,1)
     
-    local L = Instance.new("TextLabel", F)
-    L.Size = UDim2.new(1, 0, 0, 25)
-    L.Text = name
-    L.TextColor3 = Color3.new(0.7, 0.7, 0.7)
-    L.BackgroundTransparency = 1
-    L.TextXAlignment = Enum.TextXAlignment.Left
-
-    local B = Instance.new("TextBox", F)
-    B.Size = UDim2.new(0, 80, 0, 25)
-    B.Position = UDim2.new(1, -80, 0, 0)
-    B.Text = tostring(default)
-    B.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-    B.TextColor3 = Color3.new(1, 1, 1)
-    
-    B.FocusLost:Connect(function()
-        local v = tonumber(B.Text)
-        if v then
-            v = math.clamp(v, min, max)
-            B.Text = tostring(v)
-            getgenv().Zenith[key] = v
-        end
+    b.FocusLost:Connect(function()
+        local v = tonumber(b.Text)
+        if v then getgenv().Config[key] = v end
     end)
 end
 
-AddSetting("Packet Stack (1-300)", 60, 1, 300, 200, "Stack")
-AddSetting("Matcha Height (100-2000)", 120, 100, 2000, 600, "Height")
-AddSetting("Prediction (1-20)", 180, 1, 20, 6.2, "Prediction")
-AddSetting("FOV Radius (100-5000)", 240, 100, 5000, 1200, "Fov")
+CreateBox("Stack Amount", 60, 250, "Stack")
+CreateBox("Sky Height", 100, 450, "Height")
+CreateBox("Prediction", 140, 7.0, "Prediction")
+CreateBox("FOV Size", 180, 1000, "Fov")
 
-local Status = Instance.new("TextLabel", Main)
-Status.Size = UDim2.new(1, -20, 0, 30)
-Status.Position = UDim2.new(0, 10, 1, -40)
-Status.BackgroundTransparency = 1
-Status.TextColor3 = Color3.fromRGB(0, 255, 100)
-Status.Font = Enum.Font.Code
-Status.Text = "PC-WAVE MODE ACTIVE"
+local Status = Instance.new("TextLabel", M)
+Status.Size, Status.Position = UDim2.new(1, 0, 0, 30), UDim2.new(0, 0, 1, -30)
+Status.Text, Status.TextColor3, Status.BackgroundTransparency = "READY", Color3.new(0,1,0), 1
+
+UserInputService.InputBegan:Connect(function(i)
+    if i.KeyCode == getgenv().Config.ToggleKey then M.Visible = not M.Visible end
+end)
 
 task.spawn(function()
     while task.wait(0.1) do
-        local t = GetWaveTarget()
-        Status.Text = "TARGET: " .. (t and t.Name:upper() or "NONE")
-        Status.TextColor3 = t and Color3.new(1,0,0) or Color3.new(0,1,0.4)
+        local t = GetTarget()
+        Status.Text = t and "TARGETING: " .. t.Name:upper() or "WAITING..."
+        Status.TextColor3 = t and Color3.new(1,0,0) or Color3.new(0,1,0)
     end
 end)
