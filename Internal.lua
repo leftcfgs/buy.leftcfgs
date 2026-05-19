@@ -1,5 +1,5 @@
 -- Roblox Studio の StarterPlayerScripts 内の LocalScript に丸ごと上書き
--- [[ THE NEXUS OMNI-HUB : TELEPORT + SILENT AIM + ULTRA FAST SHOT v5 ]]
+-- [[ left_lua ]]
 -- 行数多め・機能強化版
 
 local Players = game:GetService("Players")
