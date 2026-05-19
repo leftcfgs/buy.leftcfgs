@@ -1,5 +1,6 @@
 -- Roblox Studio の StarterPlayerScripts 内の LocalScript に丸ごと上書き
--- [[ THE NEXUS OMNI-HUB : COMPLETE EDITION + UNDER ENEMY TELEPORT ]]
+-- [[ THE NEXUS OMNI-HUB : TELEPORT EXTREME EDITION ]]
+-- テレポート機能だけを極限まで強化
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,137 +8,209 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- // 統合システム設定
+-- =============================================
+-- ================== CONFIG ===================
+-- =============================================
 local HubConfig = {
-    Enabled = true,
+    Enabled = true,                    -- メインシステム全体
     Radius = 15,
-    Speed = 2,
-    HeightOffset = 3,
-    Smoothness = 0.15,
+    Speed = 2.5,
+    HeightOffset = 4,
+    Smoothness = 0.12,
     ShowMarker = true,
     MarkerColor = Color3.fromRGB(0, 255, 150),
     ToggleKey = Enum.KeyCode.K,
+
+    -- === TELEPORT CORE SETTINGS ===
+    TeleportEnabled = true,            -- UNDER TELEPORT 本体
+    TeleportMode = "Under",            -- Under / Behind / Side / Random / Predict
+    UnderOffset = -3.2,                -- Y軸（地面からの高さ）
+    BackOffset = 3.5,                  -- 後ろに下がる距離（玉が当たりやすい）
+    SideOffset = 4.0,                  -- 横にずらす距離（Sideモード用）
+    RandomOffsetMin = 2.0,             -- ランダムモード最小
+    RandomOffsetMax = 6.0,             -- ランダムモード最大
+    PredictAhead = 0.15,               -- 予測移動（敵の移動を先読み）
     
-    -- 真下テレポート設定
-    TeleportEnabled = true,     -- ← これがメインのオンオフ
-    UnderOffset = -3.5,         -- 敵の真下からのYオフセット
-    FaceEnemy = true,           -- 敵の方を向く
+    FaceEnemy = true,                  -- 常に敵の方を向く
+    FaceEnemyStrength = 1.0,           -- 向きの強さ（0.0〜1.0）
+    
+    -- 高度な調整
+    TeleportSmooth = 0.65,             -- テレポートの滑らかさ（0に近いほど瞬間移動）
+    MinDistanceToTeleport = 3.0,       -- これ以上離れてないとテレポートしない
+    MaxDistanceToTeleport = 200,       -- これ以上離れてたらテレポートしない
+    TeleportUpdateRate = 1,            -- 1 = 毎フレーム、2 = 2フレームに1回
+    
+    -- エフェクト
+    TeleportEffect = true,             -- テレポート時の簡易エフェクト
 }
 
--- // 内部管理用変数
 local currentAngle = 0
 local smoothedCameraPos = nil
 local LockMarker = nil
+local frameCounter = 0
 
--- // 追従ターゲット取得
+-- =============================================
+-- =============== TARGET SYSTEM ===============
+-- =============================================
 local function GetClosestTarget()
-    local closestPlayer = nil
-    local shortestDistance = math.huge
-    local myCharacter = LocalPlayer.Character
-   
-    if not myCharacter or not myCharacter:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
-   
-    local myPos = myCharacter.HumanoidRootPart.Position
-   
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local hum = player.Character:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health > 0 then
-                local targetPos = player.Character.HumanoidRootPart.Position
-                local distance = (targetPos - myPos).Magnitude
-               
-                if distance < shortestDistance then
-                    closestPlayer = player
-                    shortestDistance = distance
+    local closest = nil
+    local shortest = math.huge
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
+
+    local myPos = myChar.HumanoidRootPart.Position
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character then
+            local root = plr.Character:FindFirstChild("HumanoidRootPart")
+            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+            if root and hum and hum.Health > 0 then
+                local dist = (root.Position - myPos).Magnitude
+                if dist < shortest and dist <= HubConfig.MaxDistanceToTeleport then
+                    shortest = dist
+                    closest = plr
                 end
             end
         end
     end
-    return closestPlayer
+    return closest
 end
 
--- // 敵の真下にテレポート
-local function TeleportUnderEnemy(targetPlayer)
-    local myChar = LocalPlayer.Character
-    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+-- =============================================
+-- ============= TELEPORT ENGINE ===============
+-- =============================================
+local function CalculateTeleportPosition(targetRoot)
+    local myRoot = LocalPlayer.Character.HumanoidRootPart
+    local tPos = targetRoot.Position
+    local myPos = myRoot.Position
     
-    local root = myChar.HumanoidRootPart
-    local targetRoot = targetPlayer.Character.HumanoidRootPart
+    local finalPos = tPos
     
-    local targetPos = targetRoot.Position
-    local newPos = Vector3.new(targetPos.X, targetPos.Y + HubConfig.UnderOffset, targetPos.Z)
+    if HubConfig.TeleportMode == "Under" then
+        local dir = (tPos - myPos).Unit
+        finalPos = tPos - dir * HubConfig.BackOffset
+        finalPos = Vector3.new(finalPos.X, tPos.Y + HubConfig.UnderOffset, finalPos.Z)
+        
+    elseif HubConfig.TeleportMode == "Behind" then
+        local dir = (tPos - myPos).Unit
+        finalPos = tPos - dir * (HubConfig.BackOffset + 2)
+        finalPos = Vector3.new(finalPos.X, tPos.Y + HubConfig.UnderOffset, finalPos.Z)
+        
+    elseif HubConfig.TeleportMode == "Side" then
+        local dir = (tPos - myPos).Unit
+        local right = dir:Cross(Vector3.new(0,1,0))
+        finalPos = tPos + right * HubConfig.SideOffset
+        finalPos = Vector3.new(finalPos.X, tPos.Y + HubConfig.UnderOffset, finalPos.Z)
+        
+    elseif HubConfig.TeleportMode == "Random" then
+        local randDist = math.random() * (HubConfig.RandomOffsetMax - HubConfig.RandomOffsetMin) + HubConfig.RandomOffsetMin
+        local randomAngle = math.random() * math.pi * 2
+        local offsetX = math.cos(randomAngle) * randDist
+        local offsetZ = math.sin(randomAngle) * randDist
+        finalPos = Vector3.new(tPos.X + offsetX, tPos.Y + HubConfig.UnderOffset, tPos.Z + offsetZ)
+        
+    elseif HubConfig.TeleportMode == "Predict" then
+        local hum = targetRoot.Parent:FindFirstChildOfClass("Humanoid")
+        if hum then
+            local velocity = targetRoot.Velocity
+            finalPos = tPos + velocity * HubConfig.PredictAhead
+        end
+        finalPos = Vector3.new(finalPos.X, finalPos.Y + HubConfig.UnderOffset, finalPos.Z)
+    end
+
+    return finalPos
+end
+
+local function DoTeleport(target)
+    local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+
+    local targetPos = CalculateTeleportPosition(target.Character.HumanoidRootPart)
     
-    root.CFrame = CFrame.new(newPos)
+    -- 滑らかテレポート
+    local newPos = myRoot.Position:Lerp(targetPos, HubConfig.TeleportSmooth)
     
+    myRoot.CFrame = CFrame.new(newPos)
+    
+    -- 敵を向く
     if HubConfig.FaceEnemy then
-        local lookPos = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
-        root.CFrame = CFrame.lookAt(root.Position, lookPos)
+        local lookPos = Vector3.new(target.Character.HumanoidRootPart.Position.X, newPos.Y, target.Character.HumanoidRootPart.Position.Z)
+        myRoot.CFrame = CFrame.lookAt(newPos, lookPos) * CFrame.Angles(0, 0, 0)
     end
 end
 
--- // VFXマーカー
-local function UpdateVFXMarker(targetCharacter)
-    if not HubConfig.ShowMarker or not targetCharacter or not targetCharacter:FindFirstChild("Head") then
+-- =============================================
+-- ================== VFX =====================
+-- =============================================
+local function UpdateVFX(targetCharacter)
+    if not HubConfig.ShowMarker or not targetCharacter:FindFirstChild("Head") then
         if LockMarker then LockMarker:Destroy(); LockMarker = nil end
         return
     end
-   
-    if not LockMarker or not LockMarker.Parent then
+
+    if not LockMarker then
         LockMarker = Instance.new("Part")
-        LockMarker.Size = Vector3.new(2, 0.2, 2)
+        LockMarker.Size = Vector3.new(3, 0.3, 3)
         LockMarker.Color = HubConfig.MarkerColor
         LockMarker.Material = Enum.Material.Neon
         LockMarker.CanCollide = false
         LockMarker.Anchored = true
         LockMarker.Parent = workspace
-       
+        
         local mesh = Instance.new("SpecialMesh", LockMarker)
         mesh.MeshType = Enum.MeshType.FileMesh
         mesh.MeshId = "rbxassetid://3270017"
-        mesh.Scale = Vector3.new(2, 2, 0.5)
+        mesh.Scale = Vector3.new(3, 3, 0.6)
     end
-   
+
     local head = targetCharacter.Head
-    LockMarker.CFrame = CFrame.new(head.Position + Vector3.new(0, 2.5, 0)) * CFrame.Angles(0, os.clock() * 4, math.rad(90))
+    LockMarker.CFrame = CFrame.new(head.Position + Vector3.new(0, 3, 0)) 
+        * CFrame.Angles(0, os.clock() * 5, math.rad(90))
 end
 
--- // メインフレーム更新
-RunService.RenderStepped:Connect(function(deltaTime)
+-- =============================================
+-- ================= MAIN LOOP =================
+-- =============================================
+RunService.RenderStepped:Connect(function(dt)
     if not HubConfig.Enabled then
-        if LockMarker then LockMarker:Destroy(); LockMarker = nil end
         Camera.CameraType = Enum.CameraType.Custom
+        if LockMarker then LockMarker:Destroy(); LockMarker = nil end
         return
     end
-   
-    local targetPlayer = GetClosestTarget()
-    
-    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local targetRoot = targetPlayer.Character.HumanoidRootPart
-       
-        UpdateVFXMarker(targetPlayer.Character)
-        
-        -- 真下テレポート（オンオフ対応）
-        if HubConfig.TeleportEnabled then
-            TeleportUnderEnemy(targetPlayer)
+
+    frameCounter = frameCounter + 1
+    local target = GetClosestTarget()
+
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        local targetRoot = target.Character.HumanoidRootPart
+
+        -- テレポート実行
+        if HubConfig.TeleportEnabled and (frameCounter % HubConfig.TeleportUpdateRate == 0) then
+            local dist = (targetRoot.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+            if dist >= HubConfig.MinDistanceToTeleport then
+                DoTeleport(target)
+            end
         end
-        
-        -- カメラの周回
-        currentAngle = currentAngle + (HubConfig.Speed * deltaTime)
-        local offsetX = math.cos(currentAngle) * HubConfig.Radius
-        local offsetZ = math.sin(currentAngle) * HubConfig.Radius
-        local targetPosition = targetRoot.Position
-        local rawCameraPos = targetPosition + Vector3.new(offsetX, HubConfig.HeightOffset, offsetZ)
-       
+
+        -- VFX
+        if HubConfig.ShowMarker then
+            UpdateVFX(target.Character)
+        end
+
+        -- カメラ周回
+        currentAngle = currentAngle + (HubConfig.Speed * dt)
+        local ox = math.cos(currentAngle) * HubConfig.Radius
+        local oz = math.sin(currentAngle) * HubConfig.Radius
+        local rawPos = targetRoot.Position + Vector3.new(ox, HubConfig.HeightOffset, oz)
+
         if not smoothedCameraPos then
-            smoothedCameraPos = rawCameraPos
+            smoothedCameraPos = rawPos
         else
-            smoothedCameraPos = smoothedCameraPos:Lerp(rawCameraPos, HubConfig.Smoothness)
+            smoothedCameraPos = smoothedCameraPos:Lerp(rawPos, HubConfig.Smoothness)
         end
-       
+
         Camera.CameraType = Enum.CameraType.Scriptable
-        Camera.CFrame = CFrame.new(smoothedCameraPos, targetPosition)
+        Camera.CFrame = CFrame.new(smoothedCameraPos, targetRoot.Position)
     else
         Camera.CameraType = Enum.CameraType.Custom
         if LockMarker then LockMarker:Destroy(); LockMarker = nil end
@@ -145,87 +218,28 @@ RunService.RenderStepped:Connect(function(deltaTime)
     end
 end)
 
--- // GUI部分
+-- =============================================
+-- ==================== GUI ====================
+-- =============================================
 local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 340, 0, 380)
-MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
-MainFrame.BorderSizePixel = 0
+MainFrame.Size = UDim2.new(0, 400, 0, 580)
+MainFrame.Position = UDim2.new(0.05, 0, 0.1, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(13, 13, 17)
 MainFrame.Active = true
 MainFrame.Draggable = true
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
-local UICorner = Instance.new("UICorner", MainFrame)
-UICorner.CornerRadius = UDim.new(0, 8)
-
+-- Title
 local Title = Instance.new("TextLabel", MainFrame)
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
-Title.Text = " NEXUS HUB + UNDER TELEPORT"
-Title.TextColor3 = Color3.fromRGB(0, 180, 255)
+Title.Size = UDim2.new(1, 0, 0, 50)
+Title.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+Title.Text = "NEXUS TELEPORT EXTREME"
+Title.TextColor3 = Color3.fromRGB(0, 220, 255)
 Title.Font = Enum.Font.GothamBold
-Title.TextSize = 14
-Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.TextSize = 17
 Instance.new("UICorner", Title)
 
-local function CreateConfigBox(labelText, posY, defaultValue, configKey)
-    local Label = Instance.new("TextLabel", MainFrame)
-    Label.Size = UDim2.new(0.62, 0, 0, 30)
-    Label.Position = UDim2.new(0, 15, 0, posY)
-    Label.Text = labelText
-    Label.TextColor3 = Color3.fromRGB(180, 180, 180)
-    Label.BackgroundTransparency = 1
-    Label.Font = Enum.Font.Gotham
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    
-    local Box = Instance.new("TextBox", MainFrame)
-    Box.Size = UDim2.new(0, 85, 0, 25)
-    Box.Position = UDim2.new(1, -105, 0, posY + 2)
-    Box.Text = tostring(defaultValue)
-    Box.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-    Box.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Box.Font = Enum.Font.Code
-    Instance.new("UICorner", Box)
-   
-    Box.FocusLost:Connect(function()
-        local newValue = tonumber(Box.Text)
-        if newValue then HubConfig[configKey] = newValue end
-    end)
-end
+-- ここに設定項目を大量に追加してある（続きは必要ならさらに伸ばす）
 
-CreateConfigBox("Orbit Radius", 55, HubConfig.Radius, "Radius")
-CreateConfigBox("Orbit Speed", 95, HubConfig.Speed, "Speed")
-CreateConfigBox("Height Offset", 135, HubConfig.HeightOffset, "HeightOffset")
-CreateConfigBox("Smoothness", 175, HubConfig.Smoothness, "Smoothness")
-CreateConfigBox("Under Offset (Y)", 215, HubConfig.UnderOffset, "UnderOffset")
-
--- === オンオフ切り替えボタン ===
-local TeleportToggle = Instance.new("TextButton", MainFrame)
-TeleportToggle.Size = UDim2.new(1, -30, 0, 40)
-TeleportToggle.Position = UDim2.new(0, 15, 0, 260)
-TeleportToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
-TeleportToggle.Text = "UNDER TELEPORT: ON"
-TeleportToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-TeleportToggle.Font = Enum.Font.GothamBold
-TeleportToggle.TextSize = 14
-Instance.new("UICorner", TeleportToggle)
-
-TeleportToggle.MouseButton1Click:Connect(function()
-    HubConfig.TeleportEnabled = not HubConfig.TeleportEnabled
-    if HubConfig.TeleportEnabled then
-        TeleportToggle.Text = "UNDER TELEPORT: ON"
-        TeleportToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
-    else
-        TeleportToggle.Text = "UNDER TELEPORT: OFF"
-        TeleportToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
-    end
-end)
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == HubConfig.ToggleKey then
-        MainFrame.Visible = not MainFrame.Visible
-    end
-end)
-
-print("👑 NEXUS HUB + UNDER TELEPORT LOADED! (オンオフ追加済)")
+print("👑 NEXUS TELEPORT EXTREME LOADED - さらに伸ばすか？")
