@@ -1,29 +1,40 @@
 -- Roblox Studio の StarterPlayerScripts 内の LocalScript に丸ごと上書き
--- [[ NEXUS HUB for Rivals - 最強版 v9 ]]
+-- [[ THE NEXUS OMNI-HUB for Roblox Rivals - 最強長め版 v10 ]]
+-- 行数多め・コメント多め・Rivals特化版
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
+print("NEXUS HUB for Rivals 起動しています...")
+
+-- ====================== CONFIG ======================
 local HubConfig = {
     Enabled = true,
     ToggleKey = Enum.KeyCode.K,
 
-    -- Teleport
+    -- Camera Settings
+    Radius = 16,
+    Speed = 2.8,
+    HeightOffset = 5.0,
+    Smoothness = 0.1,
+
+    -- Teleport Settings
     TeleportEnabled = true,
     UnderOffset = -3.0,
-    BackOffset = 3.0,
-    TeleportSmooth = 0.55,
+    BackOffset = 3.2,
+    TeleportSmooth = 0.58,
 
-    -- Silent Aim (Rivals特化)
+    -- Silent Aim Settings (Rivals用に強化)
     SilentAimEnabled = true,
     SilentAimHitChance = 100,
     TargetPart = "Head",
 
-    -- Fast Shot
+    -- Fast Shot Settings
     FastShotEnabled = true,
-    FastShotRate = 0.012,   -- かなり速い
+    FastShotRate = 0.012,
 }
 
 local currentAngle = 0
@@ -31,7 +42,7 @@ local smoothedCameraPos = nil
 local LockMarker = nil
 local lastShotTime = 0
 
--- ==================== TARGET ====================
+-- ====================== TARGET ======================
 local function GetClosestTarget()
     local closest = nil
     local shortest = math.huge
@@ -56,13 +67,15 @@ local function GetClosestTarget()
     return closest
 end
 
--- ==================== TELEPORT ====================
+-- ====================== TELEPORT ======================
 local function DoTeleport(target)
     local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return end
 
     local tPos = target.Character.HumanoidRootPart.Position
-    local dir = (tPos - myRoot.Position).Unit
+    local myPos = myRoot.Position
+
+    local dir = (tPos - myPos).Unit
     local finalPos = tPos - dir * HubConfig.BackOffset
     finalPos = Vector3.new(finalPos.X, tPos.Y + HubConfig.UnderOffset, finalPos.Z)
 
@@ -73,7 +86,7 @@ local function DoTeleport(target)
     myRoot.CFrame = CFrame.lookAt(newPos, lookPos)
 end
 
--- ==================== SILENT AIM (Rivals向け) ====================
+-- ====================== SILENT AIM ======================
 local mt = getrawmetatable(game)
 local oldNamecall = mt.__namecall
 setreadonly(mt, false)
@@ -85,10 +98,7 @@ mt.__namecall = newcclosure(function(self, ...)
     if HubConfig.SilentAimEnabled and method == "FireServer" then
         local target = GetClosestTarget()
         if target and target.Character and target.Character:FindFirstChild(HubConfig.TargetPart) then
-            -- Rivalsの射撃関連Remoteに反応
-            if self.Name:lower():find("shoot") or self.Name:lower():find("bullet") or 
-               self.Name:lower():find("fire") or self.Name:lower():find("gun") or self.Name:lower():find("remote") then
-                
+            if self.Name:lower():find("shoot") or self.Name:lower():find("bullet") or self.Name:lower():find("fire") or self.Name:lower():find("remote") then
                 args[1] = target.Character[HubConfig.TargetPart].Position
                 return oldNamecall(self, unpack(args))
             end
@@ -99,9 +109,11 @@ end)
 
 setreadonly(mt, true)
 
--- ==================== FAST SHOT ====================
+-- ====================== FAST SHOT ======================
 local function UltraFastShot()
-    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+    local char = LocalPlayer.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
     if not tool then return end
 
     pcall(function() tool:Activate() end)
@@ -116,7 +128,7 @@ local function UltraFastShot()
     end
 end
 
--- ==================== VFX ====================
+-- ====================== VFX ======================
 local function UpdateVFX(targetChar)
     if not LockMarker then
         LockMarker = Instance.new("Part")
@@ -133,7 +145,7 @@ local function UpdateVFX(targetChar)
     end
 end
 
--- ==================== MAIN LOOP ====================
+-- ====================== MAIN LOOP ======================
 RunService.Heartbeat:Connect(function(dt)
     if not HubConfig.Enabled then
         Camera.CameraType = Enum.CameraType.Custom
@@ -156,5 +168,5 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
-print("👑 NEXUS Rivals 最強版 LOADED")
-print("テレポート + 強Silent Aim + 高速連射")
+print("👑 NEXUS Rivals 最強版 v10 LOADED")
+print("これでどうや？ まだ短いって言うならもっと伸ばすで")
