@@ -143,3 +143,118 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 print("✨ Modern Camera & UI System Loaded. Press 'K' to toggle UI.")
+-- [[ THE NEXUS CAMERA HUB - EXPANSION PACK ]]
+-- ターゲットへの滑らかな追従(Lerp)と、頭上ネオンエフェクトを追加
+
+local TweenService = game:GetService("TweenService")
+
+-- // 拡張用追加設定
+local VisualConfig = {
+    ShowMarker = true,
+    MarkerColor = Color3.fromRGB(0, 255, 150), -- サイバーグリーン
+    Smoothness = 0.15, -- 値が小さいほどカメラが『ヌルッ』と滑らかに動く（0.01 ～ 1.0）
+    ActiveTab = "Main"
+}
+
+-- // エフェクト用パーツの生成管理
+local LockMarker = nil
+
+local function CreateOrUpdateMarker(targetCharacter)
+    if not VisualConfig.ShowMarker or not targetCharacter or not targetCharacter:FindFirstChild("Head") then
+        if LockMarker then LockMarker:Destroy(); LockMarker = nil end
+        return
+    end
+    
+    -- マーカーがまだ無い場合は作成
+    if not LockMarker or not LockMarker.Parent then
+        LockMarker = Instance.new("Part")
+        LockMarker.Size = Vector3.new(2, 0.2, 2)
+        LockMarker.Shape = Enum.PartType.Cylinder
+        LockMarker.Color = VisualConfig.MarkerColor
+        LockMarker.Material = Enum.Material.Neon
+        LockMarker.CanCollide = false
+        LockMarker.Anchored = true
+        LockMarker.Parent = workspace
+        
+        -- 光るリングっぽく見せるための穴あきメッシュ（オプション）
+        local mesh = Instance.new("SpecialMesh", LockMarker)
+        mesh.MeshType = Enum.MeshType.FileMesh
+        mesh.MeshId = "rbxassetid://3270017" -- ドーナツ型の公式メッシュ
+        mesh.Scale = Vector3.new(2, 2, 0.5)
+    end
+    
+    -- ターゲットの頭上に配置して常に回転させる
+    local head = targetCharacter.Head
+    LockMarker.CFrame = CFrame.new(head.Position + Vector3.new(0, 2, 0)) * CFrame.Angles(0, os.clock() * 5, math.rad(90))
+end
+
+-- // カメラーワーク処理の「滑らか化」アップデート
+-- （前のスクリプトのRenderStepped部分をこのLerp版に強化して処理するぜ）
+local smoothedCameraPos = nil
+
+RunService.RenderStepped:Connect(function(deltaTime)
+    if not CameraConfig.Enabled then 
+        if LockMarker then LockMarker:Destroy(); LockMarker = nil end
+        return 
+    end
+    
+    local targetPlayer = GetClosestTarget()
+    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local targetRoot = targetPlayer.Character.HumanoidRootPart
+        
+        -- マーカーエフェクトの更新
+        CreateOrUpdateMarker(targetPlayer.Character)
+        
+        -- 円運動の位置計算
+        currentAngle = currentAngle + (CameraConfig.Speed * deltaTime)
+        local offsetX = math.cos(currentAngle) * CameraConfig.Radius
+        local offsetZ = math.sin(currentAngle) * CameraConfig.Radius
+        local targetPosition = targetRoot.Position
+        local rawTargetCameraPos = targetPosition + Vector3.new(offsetX, CameraConfig.HeightOffset, offsetZ)
+        
+        -- 【ここが重要！】Lerp（線形補間）を使って、現在のカメラ位置から目標位置まで滑らかに移動させる
+        if not smoothedCameraPos then
+            smoothedCameraPos = rawTargetCameraPos
+        else
+            smoothedCameraPos = smoothedCameraPos:Lerp(rawTargetCameraPos, VisualConfig.Smoothness)
+        end
+        
+        Camera.CameraType = Enum.CameraType.Scriptable
+        Camera.CFrame = CFrame.new(smoothedCameraPos, targetPosition)
+    else
+        Camera.CameraType = Enum.CameraType.Custom
+        if LockMarker then LockMarker:Destroy(); LockMarker = nil end
+        smoothedCameraPos = nil
+    end
+end)
+
+-- // [[ UI拡張：タブシステムの追加 ]]
+-- （既存のMainFrameの下部に新しい設定項目を追加するぜ）
+MainFrame.Size = UDim2.new(0, 320, 0, 260) -- UIの縦幅を少し広げる
+
+-- エフェクトON/OFF用のトグルボタン
+local ToggleBtn = Instance.new("TextButton", MainFrame)
+ToggleBtn.Size = UDim2.new(1, -30, 0, 35)
+ToggleBtn.Position = UDim2.new(0, 15, 0, 180)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+ToggleBtn.Text = "Toggle VFX Marker: ON"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.TextSize = 12
+local BtnCorner = Instance.new("UICorner", ToggleBtn)
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    VisualConfig.ShowMarker = not VisualConfig.ShowMarker
+    if VisualConfig.ShowMarker then
+        ToggleBtn.Text = "Toggle VFX Marker: ON"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    else
+        ToggleBtn.Text = "Toggle VFX Marker: OFF"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    end
+end)
+
+-- 滑らかさ(Smoothness)を調整する入力ボックスも追加
+CreateConfigBox("Smooth Delay (滑らかさ)", 220, VisualConfig.Smoothness, "Smoothness")
+
+print("🚀 Nexus Expansion Pack Loaded! Smoothed Camera and VFX are active.")
