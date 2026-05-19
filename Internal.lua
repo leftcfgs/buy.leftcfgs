@@ -1,3 +1,4 @@
+-- Roblox Studio の StarterPlayerScripts 内の LocalScript に丸ごと上書き
 -- [[ THE NEXUS OMNI-HUB : COMPLETE EDITION + UNDER ENEMY TELEPORT ]]
 
 local Players = game:GetService("Players")
@@ -18,10 +19,9 @@ local HubConfig = {
     ToggleKey = Enum.KeyCode.K,
     
     -- 真下テレポート設定
-    FollowEnabled = true,
-    TeleportEnabled = true,     -- ON/OFF
-    UnderOffset = -3.5,         -- 敵の真下からのYオフセット（-3.5くらいが足元）
-    FaceEnemy = true,           -- 敵の方を向くかどうか
+    TeleportEnabled = true,     -- ← これがメインのオンオフ
+    UnderOffset = -3.5,         -- 敵の真下からのYオフセット
+    FaceEnemy = true,           -- 敵の方を向く
 }
 
 -- // 内部管理用変数
@@ -66,13 +66,11 @@ local function TeleportUnderEnemy(targetPlayer)
     local root = myChar.HumanoidRootPart
     local targetRoot = targetPlayer.Character.HumanoidRootPart
     
-    -- 敵の位置の真下にテレポート
     local targetPos = targetRoot.Position
     local newPos = Vector3.new(targetPos.X, targetPos.Y + HubConfig.UnderOffset, targetPos.Z)
     
     root.CFrame = CFrame.new(newPos)
     
-    -- 敵の方を向く
     if HubConfig.FaceEnemy then
         local lookPos = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
         root.CFrame = CFrame.lookAt(root.Position, lookPos)
@@ -120,12 +118,12 @@ RunService.RenderStepped:Connect(function(deltaTime)
        
         UpdateVFXMarker(targetPlayer.Character)
         
-        -- 敵の真下テレポート
-        if HubConfig.FollowEnabled and HubConfig.TeleportEnabled then
+        -- 真下テレポート（オンオフ対応）
+        if HubConfig.TeleportEnabled then
             TeleportUnderEnemy(targetPlayer)
         end
         
-        -- カメラの周回（敵を中心に回る）
+        -- カメラの周回
         currentAngle = currentAngle + (HubConfig.Speed * deltaTime)
         local offsetX = math.cos(currentAngle) * HubConfig.Radius
         local offsetZ = math.sin(currentAngle) * HubConfig.Radius
@@ -150,8 +148,8 @@ end)
 -- // GUI部分
 local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 340, 0, 360)
-MainFrame.Position = UDim2.new(0.05, 0, 0.25, 0)
+MainFrame.Size = UDim2.new(0, 340, 0, 380)
+MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -191,11 +189,7 @@ local function CreateConfigBox(labelText, posY, defaultValue, configKey)
    
     Box.FocusLost:Connect(function()
         local newValue = tonumber(Box.Text)
-        if newValue then
-            HubConfig[configKey] = newValue
-        else
-            Box.Text = tostring(HubConfig[configKey])
-        end
+        if newValue then HubConfig[configKey] = newValue end
     end)
 end
 
@@ -205,25 +199,25 @@ CreateConfigBox("Height Offset", 135, HubConfig.HeightOffset, "HeightOffset")
 CreateConfigBox("Smoothness", 175, HubConfig.Smoothness, "Smoothness")
 CreateConfigBox("Under Offset (Y)", 215, HubConfig.UnderOffset, "UnderOffset")
 
--- トグルボタン
-local FollowToggle = Instance.new("TextButton", MainFrame)
-FollowToggle.Size = UDim2.new(1, -30, 0, 35)
-FollowToggle.Position = UDim2.new(0, 15, 0, 260)
-FollowToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
-FollowToggle.Text = "UNDER TELEPORT: ON"
-FollowToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-FollowToggle.Font = Enum.Font.GothamBold
-FollowToggle.TextSize = 13
-Instance.new("UICorner", FollowToggle)
+-- === オンオフ切り替えボタン ===
+local TeleportToggle = Instance.new("TextButton", MainFrame)
+TeleportToggle.Size = UDim2.new(1, -30, 0, 40)
+TeleportToggle.Position = UDim2.new(0, 15, 0, 260)
+TeleportToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+TeleportToggle.Text = "UNDER TELEPORT: ON"
+TeleportToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+TeleportToggle.Font = Enum.Font.GothamBold
+TeleportToggle.TextSize = 14
+Instance.new("UICorner", TeleportToggle)
 
-FollowToggle.MouseButton1Click:Connect(function()
-    HubConfig.FollowEnabled = not HubConfig.FollowEnabled
-    if HubConfig.FollowEnabled then
-        FollowToggle.Text = "UNDER TELEPORT: ON"
-        FollowToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+TeleportToggle.MouseButton1Click:Connect(function()
+    HubConfig.TeleportEnabled = not HubConfig.TeleportEnabled
+    if HubConfig.TeleportEnabled then
+        TeleportToggle.Text = "UNDER TELEPORT: ON"
+        TeleportToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
     else
-        FollowToggle.Text = "UNDER TELEPORT: OFF"
-        FollowToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+        TeleportToggle.Text = "UNDER TELEPORT: OFF"
+        TeleportToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
     end
 end)
 
@@ -234,4 +228,4 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("👑 NEXUS HUB + UNDER ENEMY TELEPORT LOADED!")
+print("👑 NEXUS HUB + UNDER TELEPORT LOADED! (オンオフ追加済)")
