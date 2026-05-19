@@ -1,6 +1,5 @@
 -- Roblox Studio の StarterPlayerScripts 内の LocalScript に丸ごと上書き
--- [[ THE NEXUS OMNI-HUB for Roblox Rivals - 最強長め版 v10 ]]
--- 行数多め・コメント多め・Rivals特化版
+-- [[ NEXUS Rivals 最強版 with UI ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -8,33 +7,15 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
-print("NEXUS HUB for Rivals 起動しています...")
-
--- ====================== CONFIG ======================
 local HubConfig = {
     Enabled = true,
-    ToggleKey = Enum.KeyCode.K,
-
-    -- Camera Settings
-    Radius = 16,
-    Speed = 2.8,
-    HeightOffset = 5.0,
-    Smoothness = 0.1,
-
-    -- Teleport Settings
     TeleportEnabled = true,
+    SilentAimEnabled = true,
+    FastShotEnabled = true,
     UnderOffset = -3.0,
     BackOffset = 3.2,
-    TeleportSmooth = 0.58,
-
-    -- Silent Aim Settings (Rivals用に強化)
-    SilentAimEnabled = true,
-    SilentAimHitChance = 100,
-    TargetPart = "Head",
-
-    -- Fast Shot Settings
-    FastShotEnabled = true,
     FastShotRate = 0.012,
+    TargetPart = "Head",
 }
 
 local currentAngle = 0
@@ -42,131 +23,110 @@ local smoothedCameraPos = nil
 local LockMarker = nil
 local lastShotTime = 0
 
--- ====================== TARGET ======================
+-- GetClosestTarget, DoTeleport, Silent Aim, UltraFastShot は省略せず全部入れる
 local function GetClosestTarget()
-    local closest = nil
-    local shortest = math.huge
+    local closest, dist = nil, math.huge
     local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return nil end
-
-    local myPos = myRoot.Position
-
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and plr.Character then
             local root = plr.Character:FindFirstChild("HumanoidRootPart")
             local hum = plr.Character:FindFirstChildOfClass("Humanoid")
             if root and hum and hum.Health > 0 then
-                local dist = (root.Position - myPos).Magnitude
-                if dist < shortest then
-                    shortest = dist
-                    closest = plr
-                end
+                local d = (root.Position - myRoot.Position).Magnitude
+                if d < dist then dist = d closest = plr end
             end
         end
     end
     return closest
 end
 
--- ====================== TELEPORT ======================
 local function DoTeleport(target)
     local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return end
-
     local tPos = target.Character.HumanoidRootPart.Position
-    local myPos = myRoot.Position
-
-    local dir = (tPos - myPos).Unit
+    local dir = (tPos - myRoot.Position).Unit
     local finalPos = tPos - dir * HubConfig.BackOffset
     finalPos = Vector3.new(finalPos.X, tPos.Y + HubConfig.UnderOffset, finalPos.Z)
-
-    local newPos = myRoot.Position:Lerp(finalPos, HubConfig.TeleportSmooth)
+    local newPos = myRoot.Position:Lerp(finalPos, 0.55)
     myRoot.CFrame = CFrame.new(newPos)
-
-    local lookPos = Vector3.new(tPos.X, newPos.Y, tPos.Z)
-    myRoot.CFrame = CFrame.lookAt(newPos, lookPos)
+    myRoot.CFrame = CFrame.lookAt(newPos, Vector3.new(tPos.X, newPos.Y, tPos.Z))
 end
 
--- ====================== SILENT AIM ======================
+-- Silent Aim
 local mt = getrawmetatable(game)
-local oldNamecall = mt.__namecall
+local old = mt.__namecall
 setreadonly(mt, false)
-
 mt.__namecall = newcclosure(function(self, ...)
     local args = {...}
-    local method = getnamecallmethod()
-
-    if HubConfig.SilentAimEnabled and method == "FireServer" then
+    if HubConfig.SilentAimEnabled and getnamecallmethod() == "FireServer" then
         local target = GetClosestTarget()
         if target and target.Character and target.Character:FindFirstChild(HubConfig.TargetPart) then
-            if self.Name:lower():find("shoot") or self.Name:lower():find("bullet") or self.Name:lower():find("fire") or self.Name:lower():find("remote") then
+            if self.Name:lower():find("shoot") or self.Name:lower():find("bullet") or self.Name:lower():find("fire") then
                 args[1] = target.Character[HubConfig.TargetPart].Position
-                return oldNamecall(self, unpack(args))
+                return old(self, unpack(args))
             end
         end
     end
-    return oldNamecall(self, ...)
+    return old(self, ...)
 end)
-
 setreadonly(mt, true)
 
--- ====================== FAST SHOT ======================
 local function UltraFastShot()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local tool = char:FindFirstChildOfClass("Tool")
-    if not tool then return end
-
-    pcall(function() tool:Activate() end)
-
-    for _, v in ipairs(tool:GetDescendants()) do
-        if v:IsA("RemoteEvent") then
-            pcall(function()
+    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+    if tool then
+        tool:Activate()
+        for _, v in ipairs(tool:GetDescendants()) do
+            if v:IsA("RemoteEvent") then
                 v:FireServer()
-                v:FireServer()
-            end)
+            end
         end
     end
 end
 
--- ====================== VFX ======================
-local function UpdateVFX(targetChar)
-    if not LockMarker then
-        LockMarker = Instance.new("Part")
-        LockMarker.Size = Vector3.new(4, 0.4, 4)
-        LockMarker.Color = Color3.fromRGB(0, 255, 150)
-        LockMarker.Material = Enum.Material.Neon
-        LockMarker.Anchored = true
-        LockMarker.CanCollide = false
-        LockMarker.Parent = workspace
-    end
-    local head = targetChar:FindFirstChild("Head")
-    if head then
-        LockMarker.CFrame = CFrame.new(head.Position + Vector3.new(0, 3.5, 0)) * CFrame.Angles(0, os.clock() * 8, math.rad(90))
-    end
+-- ==================== GUI ====================
+local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 380, 0, 520)
+MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15,15,20)
+MainFrame.Draggable = true
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1,0,0,50)
+Title.BackgroundColor3 = Color3.fromRGB(25,25,35)
+Title.Text = "NEXUS Rivals 最強版"
+Title.TextColor3 = Color3.fromRGB(0, 255, 200)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 16
+Instance.new("UICorner", Title)
+
+local function MakeToggle(name, posY, configKey, defaultText)
+    local btn = Instance.new("TextButton", MainFrame)
+    btn.Size = UDim2.new(1, -40, 0, 45)
+    btn.Position = UDim2.new(0, 20, 0, posY)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    btn.Text = defaultText
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", btn)
+
+    btn.MouseButton1Click:Connect(function()
+        HubConfig[configKey] = not HubConfig[configKey]
+        btn.Text = HubConfig[configKey] and defaultText or defaultText:gsub("ON", "OFF")
+        btn.BackgroundColor3 = HubConfig[configKey] and Color3.fromRGB(0,170,255) or Color3.fromRGB(70,70,80)
+    end)
 end
 
--- ====================== MAIN LOOP ======================
-RunService.Heartbeat:Connect(function(dt)
-    if not HubConfig.Enabled then
-        Camera.CameraType = Enum.CameraType.Custom
-        return
-    end
+MakeToggle("TELEPORT", 70, "TeleportEnabled", "TELEPORT: ON")
+MakeToggle("SILENT AIM", 130, "SilentAimEnabled", "SILENT AIM: ON")
+MakeToggle("FAST SHOT", 190, "FastShotEnabled", "FAST SHOT: ON")
 
-    local target = GetClosestTarget()
-
-    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-        if HubConfig.TeleportEnabled then
-            DoTeleport(target)
-        end
-
-        UpdateVFX(target.Character)
-
-        if HubConfig.FastShotEnabled and (tick() - lastShotTime >= HubConfig.FastShotRate) then
-            UltraFastShot()
-            lastShotTime = tick()
-        end
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == HubConfig.ToggleKey then
+        MainFrame.Visible = not MainFrame.Visible
     end
 end)
 
-print("👑 NEXUS Rivals 最強版 v10 LOADED")
-print("これでどうや？ まだ短いって言うならもっと伸ばすで")
+print("👑 NEXUS Rivals 最強版 with UI LOADED")
