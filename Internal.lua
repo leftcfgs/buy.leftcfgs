@@ -1,5 +1,5 @@
 -- Roblox Studio の StarterPlayerScripts 内の LocalScript に丸ごと上書き
--- [[ THE NEXUS OMNI-HUB : TELEPORT EXTREME + FAST SHOT ]]
+-- [[ THE NEXUS OMNI-HUB : TELEPORT EXTREME + ULTRA FAST SHOT FINAL ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,53 +7,42 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- =============================================
--- ================== CONFIG ===================
--- =============================================
 local HubConfig = {
-    Enabled = true,                    -- メインシステム全体
-    Radius = 15,
-    Speed = 2.5,
-    HeightOffset = 4,
-    Smoothness = 0.12,
+    Enabled = true,
+    Radius = 16,
+    Speed = 2.8,
+    HeightOffset = 4.8,
+    Smoothness = 0.1,
     ShowMarker = true,
-    MarkerColor = Color3.fromRGB(0, 255, 150),
+    MarkerColor = Color3.fromRGB(0, 255, 170),
     ToggleKey = Enum.KeyCode.K,
 
-    -- === TELEPORT SETTINGS ===
+    -- Teleport
     TeleportEnabled = true,
-    TeleportMode = "Under",            -- Under / Behind / Side / Random / Predict
-    UnderOffset = -3.2,
-    BackOffset = 3.5,
-    SideOffset = 4.0,
-    RandomOffsetMin = 2.0,
-    RandomOffsetMax = 6.0,
-    PredictAhead = 0.15,
+    UnderOffset = -3.1,
+    BackOffset = 3.8,
+    TeleportSmooth = 0.68,
     FaceEnemy = true,
-    TeleportSmooth = 0.65,
-    MinDistanceToTeleport = 3.0,
 
-    -- === FAST SHOT SETTINGS ===
-    FastShotEnabled = true,            -- 自動連射機能
-    FastShotSpeed = 0.08,              -- 連射間隔（小さいほど速い・0.05がかなりヤバい）
-    FastShotOnlyTeleport = true,       -- テレポート中だけ連射するかどうか
+    -- Ultra Fast Shot
+    FastShotEnabled = true,
+    FastShotRate = 0.022,           -- ここを下げれば下げるほど連射が速くなる
+    FastShotOnlyWhenTeleport = true,
 }
 
 local currentAngle = 0
 local smoothedCameraPos = nil
 local LockMarker = nil
-local frameCounter = 0
 local lastShotTime = 0
 
--- =============================================
--- =============== TARGET SYSTEM ===============
+-- 最寄りターゲット取得
 local function GetClosestTarget()
     local closest = nil
     local shortest = math.huge
-    local myChar = LocalPlayer.Character
-    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil end
 
-    local myPos = myChar.HumanoidRootPart.Position
+    local myPos = myRoot.Position
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and plr.Character then
@@ -71,121 +60,103 @@ local function GetClosestTarget()
     return closest
 end
 
--- =============================================
--- ============= TELEPORT ENGINE ===============
-local function CalculateTeleportPosition(targetRoot)
-    local myRoot = LocalPlayer.Character.HumanoidRootPart
-    local tPos = targetRoot.Position
-    local myPos = myRoot.Position
-    local finalPos = tPos
-
-    if HubConfig.TeleportMode == "Under" then
-        local dir = (tPos - myPos).Unit
-        finalPos = tPos - dir * HubConfig.BackOffset
-        finalPos = Vector3.new(finalPos.X, tPos.Y + HubConfig.UnderOffset, finalPos.Z)
-    elseif HubConfig.TeleportMode == "Behind" then
-        local dir = (tPos - myPos).Unit
-        finalPos = tPos - dir * (HubConfig.BackOffset + 3)
-        finalPos = Vector3.new(finalPos.X, tPos.Y + HubConfig.UnderOffset, finalPos.Z)
-    -- Side, Random, Predict は省略（必要なら言え）
-    end
-
-    return finalPos
-end
-
+-- テレポート実行
 local function DoTeleport(target)
     local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return end
 
-    local targetPos = CalculateTeleportPosition(target.Character.HumanoidRootPart)
-    local newPos = myRoot.Position:Lerp(targetPos, HubConfig.TeleportSmooth)
+    local tRoot = target.Character.HumanoidRootPart
+    local tPos = tRoot.Position
+    local myPos = myRoot.Position
 
+    local dir = (tPos - myPos).Unit
+    local finalPos = tPos - dir * HubConfig.BackOffset
+    finalPos = Vector3.new(finalPos.X, tPos.Y + HubConfig.UnderOffset, finalPos.Z)
+
+    local newPos = myRoot.Position:Lerp(finalPos, HubConfig.TeleportSmooth)
+    
     myRoot.CFrame = CFrame.new(newPos)
 
     if HubConfig.FaceEnemy then
-        local lookPos = Vector3.new(target.Character.HumanoidRootPart.Position.X, newPos.Y, target.Character.HumanoidRootPart.Position.Z)
+        local lookPos = Vector3.new(tPos.X, newPos.Y, tPos.Z)
         myRoot.CFrame = CFrame.lookAt(newPos, lookPos)
     end
 end
 
--- =============================================
--- ================= FAST SHOT =================
-local function FireWeapon()
-    local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+-- 超高速射撃
+local function UltraFastShot()
+    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
     if not tool then return end
 
-    local mouse = LocalPlayer:GetMouse()
-    
-    -- 可能な限り高速で撃つ（シミュレート）
-    if tool:FindFirstChild("RemoteEvent") or tool:FindFirstChild("Shoot") then
-        -- 多くのゲームで効く方法
-        local activate = tool:FindFirstChild("Activate") or tool.Activate
-        if activate then
-            tool:Activate()
+    -- メインの連射方法
+    tool:Activate()
+
+    -- RemoteEventを全力で探して発火
+    for _, v in ipairs(tool:GetDescendants()) do
+        if v:IsA("RemoteEvent") then
+            pcall(function()
+                v:FireServer()
+            end)
         end
-    else
-        -- マウスクリックシミュレート
-        mouse.Button1Down:Fire()
-        task.wait(0.001)
-        mouse.Button1Up:Fire()
     end
 end
 
--- =============================================
--- ================= MAIN LOOP =================
-RunService.RenderStepped:Connect(function(dt)
+-- VFXマーカー
+local function UpdateVFX(targetChar)
+    if not HubConfig.ShowMarker or not targetChar:FindFirstChild("Head") then
+        if LockMarker then LockMarker:Destroy(); LockMarker = nil end
+        return
+    end
+
+    if not LockMarker then
+        LockMarker = Instance.new("Part")
+        LockMarker.Size = Vector3.new(3.2, 0.35, 3.2)
+        LockMarker.Color = HubConfig.MarkerColor
+        LockMarker.Material = Enum.Material.Neon
+        LockMarker.CanCollide = false
+        LockMarker.Anchored = true
+        LockMarker.Parent = workspace
+
+        local mesh = Instance.new("SpecialMesh", LockMarker)
+        mesh.MeshType = Enum.MeshType.FileMesh
+        mesh.MeshId = "rbxassetid://3270017"
+        mesh.Scale = Vector3.new(3.5, 3.5, 0.7)
+    end
+
+    local head = targetChar.Head
+    LockMarker.CFrame = CFrame.new(head.Position + Vector3.new(0, 3.3, 0)) * CFrame.Angles(0, os.clock() * 7, math.rad(90))
+end
+
+-- ===================== MAIN LOOP =====================
+RunService.Heartbeat:Connect(function(dt)
     if not HubConfig.Enabled then
         Camera.CameraType = Enum.CameraType.Custom
         return
     end
 
-    frameCounter += 1
     local target = GetClosestTarget()
 
     if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
         local targetRoot = target.Character.HumanoidRootPart
 
         -- テレポート
-        if HubConfig.TeleportEnabled and (frameCounter % 1 == 0) then
-            local dist = (targetRoot.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-            if dist >= HubConfig.MinDistanceToTeleport then
-                DoTeleport(target)
-            end
+        if HubConfig.TeleportEnabled then
+            DoTeleport(target)
         end
 
-        -- VFX Marker
-        if HubConfig.ShowMarker and target.Character:FindFirstChild("Head") then
-            if not LockMarker then
-                LockMarker = Instance.new("Part")
-                LockMarker.Size = Vector3.new(3,0.3,3)
-                LockMarker.Color = HubConfig.MarkerColor
-                LockMarker.Material = Enum.Material.Neon
-                LockMarker.CanCollide = false
-                LockMarker.Anchored = true
-                LockMarker.Parent = workspace
-                local m = Instance.new("SpecialMesh", LockMarker)
-                m.MeshType = Enum.MeshType.FileMesh
-                m.MeshId = "rbxassetid://3270017"
-                m.Scale = Vector3.new(3,3,0.6)
-            end
-            local head = target.Character.Head
-            LockMarker.CFrame = CFrame.new(head.Position + Vector3.new(0,3,0)) * CFrame.Angles(0, os.clock()*5, math.rad(90))
-        end
+        -- VFX
+        UpdateVFX(target.Character)
 
-        -- Fast Shot 自動連射
+        -- Fast Shot
         if HubConfig.FastShotEnabled then
-            local shouldShoot = true
-            if HubConfig.FastShotOnlyTeleport and not HubConfig.TeleportEnabled then
-                shouldShoot = false
-            end
-
-            if shouldShoot and tick() - lastShotTime >= HubConfig.FastShotSpeed then
-                FireWeapon()
+            local canShoot = not HubConfig.FastShotOnlyWhenTeleport or HubConfig.TeleportEnabled
+            if canShoot and (tick() - lastShotTime >= HubConfig.FastShotRate) then
+                UltraFastShot()
                 lastShotTime = tick()
             end
         end
 
-        -- カメラ
+        -- カメラ周回
         currentAngle = currentAngle + (HubConfig.Speed * dt)
         local ox = math.cos(currentAngle) * HubConfig.Radius
         local oz = math.sin(currentAngle) * HubConfig.Radius
@@ -197,45 +168,46 @@ RunService.RenderStepped:Connect(function(dt)
         Camera.CFrame = CFrame.new(smoothedCameraPos, targetRoot.Position)
     else
         Camera.CameraType = Enum.CameraType.Custom
-        if LockMarker then LockMarker:Destroy(); LockMarker = nil end
+        if LockMarker then
+            LockMarker:Destroy()
+            LockMarker = nil
+        end
     end
 end)
 
--- =============================================
 -- ===================== GUI =====================
 local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 400, 0, 620)
-MainFrame.Position = UDim2.new(0.05, 0, 0.1, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(13,13,17)
+MainFrame.Size = UDim2.new(0, 400, 0, 580)
+MainFrame.Position = UDim2.new(0.05, 0, 0.15, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(13, 13, 18)
 MainFrame.Draggable = true
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0,10)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Size = UDim2.new(1,0,0,55)
-Title.BackgroundColor3 = Color3.fromRGB(20,20,28)
-Title.Text = "NEXUS TELEPORT EXTREME + FAST SHOT"
-Title.TextColor3 = Color3.fromRGB(0, 230, 255)
+Title.BackgroundColor3 = Color3.fromRGB(20,20,30)
+Title.Text = "NEXUS TELEPORT EXTREME + ULTRA FAST SHOT"
+Title.TextColor3 = Color3.fromRGB(0, 255, 200)
 Title.Font = Enum.Font.GothamBold
-Title.TextSize = 16
+Title.TextSize = 15.5
 Instance.new("UICorner", Title)
 
--- 設定ボックス関数（省略せず長く）
-local function CreateConfigBox(label, y, default, key)
+local function CreateBox(label, y, default, key)
     local lbl = Instance.new("TextLabel", MainFrame)
-    lbl.Size = UDim2.new(0.55,0,0,30)
     lbl.Position = UDim2.new(0,20,0,y)
+    lbl.Size = UDim2.new(0.5,0,0,30)
     lbl.Text = label
-    lbl.TextColor3 = Color3.fromRGB(200,200,200)
+    lbl.TextColor3 = Color3.fromRGB(190,190,190)
     lbl.BackgroundTransparency = 1
     lbl.Font = Enum.Font.Gotham
     lbl.TextXAlignment = Enum.TextXAlignment.Left
 
     local box = Instance.new("TextBox", MainFrame)
-    box.Size = UDim2.new(0,100,0,28)
-    box.Position = UDim2.new(1,-130,0,y)
+    box.Position = UDim2.new(1,-140,0,y)
+    box.Size = UDim2.new(0,120,0,28)
     box.Text = tostring(default)
-    box.BackgroundColor3 = Color3.fromRGB(30,30,38)
+    box.BackgroundColor3 = Color3.fromRGB(28,28,38)
     box.TextColor3 = Color3.new(1,1,1)
     Instance.new("UICorner", box)
 
@@ -245,60 +217,127 @@ local function CreateConfigBox(label, y, default, key)
     end)
 end
 
--- 設定項目
-CreateConfigBox("Orbit Radius", 70, HubConfig.Radius, "Radius")
-CreateConfigBox("Orbit Speed", 110, HubConfig.Speed, "Speed")
-CreateConfigBox("Under Offset (Y)", 150, HubConfig.UnderOffset, "UnderOffset")
-CreateConfigBox("Back Offset", 190, HubConfig.BackOffset, "BackOffset")
-CreateConfigBox("Teleport Smooth", 230, HubConfig.TeleportSmooth, "TeleportSmooth")
-CreateConfigBox("Fast Shot Speed (秒)", 270, HubConfig.FastShotSpeed, "FastShotSpeed")
+CreateBox("FastShot Rate", 80, HubConfig.FastShotRate, "FastShotRate")
+CreateBox("Under Offset", 120, HubConfig.UnderOffset, "UnderOffset")
+CreateBox("Back Offset", 160, HubConfig.BackOffset, "BackOffset")
+CreateBox("Teleport Smooth", 200, HubConfig.TeleportSmooth, "TeleportSmooth")
 
--- メインオンオフ
-local MainToggle = Instance.new("TextButton", MainFrame)
-MainToggle.Size = UDim2.new(1,-40,0,45)
-MainToggle.Position = UDim2.new(0,20,0,320)
-MainToggle.BackgroundColor3 = Color3.fromRGB(0,180,255)
-MainToggle.Text = "MAIN SYSTEM: ON"
-MainToggle.TextColor3 = Color3.new(1,1,1)
-MainToggle.Font = Enum.Font.GothamBold
-Instance.new("UICorner", MainToggle)
+-- トグル
+local function MakeToggle(text, y, key, onText)
+    local btn = Instance.new("TextButton", MainFrame)
+    btn.Size = UDim2.new(1,-40,0,48)
+    btn.Position = UDim2.new(0,20,0,y)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    btn.Text = onText
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    Instance.new("UICorner", btn)
 
-MainToggle.MouseButton1Click:Connect(function()
-    HubConfig.Enabled = not HubConfig.Enabled
-    MainToggle.Text = HubConfig.Enabled and "MAIN SYSTEM: ON" or "MAIN SYSTEM: OFF"
-    MainToggle.BackgroundColor3 = HubConfig.Enabled and Color3.fromRGB(0,180,255) or Color3.fromRGB(60,60,70)
+    btn.MouseButton1Click:Connect(function()
+        HubConfig[key] = not HubConfig[key]
+        btn.Text = HubConfig[key] and onText or onText:gsub("ON", "OFF")
+        btn.BackgroundColor3 = HubConfig[key] and Color3.fromRGB(0,170,255) or Color3.fromRGB(65,65,75)
+    end)
+end
+
+MakeToggle("MAIN SYSTEM", 270, "Enabled", "MAIN SYSTEM: ON")
+MakeToggle("TELEPORT", 330, "TeleportEnabled", "TELEPORT: ON")
+MakeToggle("ULTRA FAST SHOT", 390, "FastShotEnabled", "ULTRA FAST SHOT: ON")
+
+print("👑 NEXUS EXTREME LOADED - 繋げて使え")
+
+-- ここから続き
+
+-- 追加設定（さらに細かく調整できるように）
+HubConfig.Extra = {
+    CameraShake = false,
+    MarkerSpinSpeed = 7,
+    AutoFaceStrength = 1,
+}
+
+-- より強力なFastShot（複数方法同時実行）
+local function UltraFastShotAdvanced()
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then return end
+
+    -- 1. 通常Activate
+    pcall(function() tool:Activate() end)
+
+    -- 2. すべてのRemoteEventを連打
+    for _, obj in ipairs(tool:GetDescendants()) do
+        if obj:IsA("RemoteEvent") then
+            pcall(function()
+                obj:FireServer()
+                obj:FireServer() -- 2回撃つ
+            end)
+        end
+    end
+
+    -- 3. ツール内のBindableEventも起動
+    for _, obj in ipairs(tool:GetDescendants()) do
+        if obj:IsA("BindableEvent") and (obj.Name:lower():find("shoot") or obj.Name:lower():find("fire")) then
+            pcall(function() obj:Fire() end)
+        end
+    end
+end
+
+-- メインループの続き（より安定させる）
+RunService.Heartbeat:Connect(function(dt)
+    if not HubConfig.Enabled then
+        Camera.CameraType = Enum.CameraType.Custom
+        if LockMarker then LockMarker:Destroy(); LockMarker = nil end
+        return
+    end
+
+    local target = GetClosestTarget()
+
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        local targetRoot = target.Character.HumanoidRootPart
+
+        -- テレポート
+        if HubConfig.TeleportEnabled then
+            DoTeleport(target)
+        end
+
+        -- VFX
+        UpdateVFX(target.Character)
+
+        -- Ultra Fast Shot
+        if HubConfig.FastShotEnabled then
+            local canShoot = true
+            if HubConfig.FastShotOnlyWhenTeleport and not HubConfig.TeleportEnabled then
+                canShoot = false
+            end
+
+            if canShoot and (tick() - lastShotTime >= HubConfig.FastShotRate) then
+                UltraFastShotAdvanced()   -- 強化版を使用
+                lastShotTime = tick()
+            end
+        end
+
+        -- カメラ処理
+        currentAngle = currentAngle + (HubConfig.Speed * dt)
+        local ox = math.cos(currentAngle) * HubConfig.Radius
+        local oz = math.sin(currentAngle) * HubConfig.Radius
+        local rawPos = targetRoot.Position + Vector3.new(ox, HubConfig.HeightOffset, oz)
+
+        smoothedCameraPos = smoothedCameraPos and smoothedCameraPos:Lerp(rawPos, HubConfig.Smoothness) or rawPos
+
+        Camera.CameraType = Enum.CameraType.Scriptable
+        Camera.CFrame = CFrame.new(smoothedCameraPos, targetRoot.Position)
+    else
+        Camera.CameraType = Enum.CameraType.Custom
+        if LockMarker then
+            LockMarker:Destroy()
+            LockMarker = nil
+        end
+        smoothedCameraPos = nil
+    end
 end)
 
--- Teleportオンオフ
-local TpToggle = Instance.new("TextButton", MainFrame)
-TpToggle.Size = UDim2.new(1,-40,0,45)
-TpToggle.Position = UDim2.new(0,20,0,375)
-TpToggle.BackgroundColor3 = Color3.fromRGB(0,180,255)
-TpToggle.Text = "UNDER TELEPORT: ON"
-TpToggle.TextColor3 = Color3.new(1,1,1)
-TpToggle.Font = Enum.Font.GothamBold
-Instance.new("UICorner", TpToggle)
-
-TpToggle.MouseButton1Click:Connect(function()
-    HubConfig.TeleportEnabled = not HubConfig.TeleportEnabled
-    TpToggle.Text = HubConfig.TeleportEnabled and "UNDER TELEPORT: ON" or "UNDER TELEPORT: OFF"
-    TpToggle.BackgroundColor3 = HubConfig.TeleportEnabled and Color3.fromRGB(0,180,255) or Color3.fromRGB(60,60,70)
-end)
-
--- Fast Shotオンオフ
-local FastToggle = Instance.new("TextButton", MainFrame)
-FastToggle.Size = UDim2.new(1,-40,0,45)
-FastToggle.Position = UDim2.new(0,20,0,430)
-FastToggle.BackgroundColor3 = Color3.fromRGB(0,180,255)
-FastToggle.Text = "FAST SHOT: ON"
-FastToggle.TextColor3 = Color3.new(1,1,1)
-FastToggle.Font = Enum.Font.GothamBold
-Instance.new("UICorner", FastToggle)
-
-FastToggle.MouseButton1Click:Connect(function()
-    HubConfig.FastShotEnabled = not HubConfig.FastShotEnabled
-    FastToggle.Text = HubConfig.FastShotEnabled and "FAST SHOT: ON" or "FAST SHOT: OFF"
-    FastToggle.BackgroundColor3 = HubConfig.FastShotEnabled and Color3.fromRGB(0,180,255) or Color3.fromRGB(60,60,70)
-end)
-
-print("👑 NEXUS TELEPORT EXTREME + FAST SHOT LOADED!")
+print("👑 NEXUS TELEPORT EXTREME + ULTRA FAST SHOT COMPLETE")
+print("貼り付け完了！ テストしてみてくれ")
