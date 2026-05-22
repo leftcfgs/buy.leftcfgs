@@ -6,7 +6,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
-print("=== NEXUS Rivals Skin Changer ===")
+print("=== NEXUS Rivals Skin Changer 複雑長め版 起動 ===")
 
 local SkinConfig = {
     Enabled = true,
