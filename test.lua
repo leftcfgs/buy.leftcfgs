@@ -1,90 +1,68 @@
--- Nemesis Alpha ESP + Silent Aim
-
+-- Bridge Duel Simple Reach (On/Off UI)
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+local player = Players.LocalPlayer
 
-local Config = {
-    Enabled = true,
-    ESP = true,
-    SilentAim = true,
-    Aimbot = false,
-    AimPart = "Head",
-    Smoothness = 0.18,
-    AimFOV = 90,
-    SilentFOV = 120,
-}
+local reachMultiplier = 1.6  -- ここを変更（1.3 = 低リスク, 1.6 = バランス, 2.0 = 強力）
+local enabled = false
 
-local ESPTable = {}
+-- シンプルUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ReachToggle"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
 
--- ==================== ESP ====================
-local function UpdateESP()
-    for plr, data in pairs(ESPTable) do
-        if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local root = plr.Character.HumanoidRootPart
-            local screen, onScreen = Camera:WorldToViewportPoint(root.Position)
-            if onScreen then
-                local size = (Camera:WorldToViewportPoint(root.Position - Vector3.new(0,3,0)).Y - Camera:WorldToViewportPoint(root.Position + Vector3.new(0,3,0)).Y) * 0.9
-                data.Box.Size = Vector2.new(size * 1.8, size * 2.8)
-                data.Box.Position = Vector2.new(screen.X - data.Box.Size.X/2, screen.Y - data.Box.Size.Y/2)
-                data.Box.Visible = Config.ESP
-            else
-                data.Box.Visible = false
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 180, 0, 80)
+Frame.Position = UDim2.new(0.5, -90, 0.1, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Frame.BorderSizePixel = 0
+Frame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0.5, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Bridge Duel Reach"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextScaled = true
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = Frame
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0.9, 0, 0.4, 0)
+ToggleButton.Position = UDim2.new(0.05, 0, 0.55, 0)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+ToggleButton.Text = "OFF"
+ToggleButton.TextColor3 = Color3.new(1,1,1)
+ToggleButton.TextScaled = true
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.Parent = Frame
+
+-- Reach機能
+local function applyReach()
+    while enabled and player.Character do
+        local tool = player.Character:FindFirstChildOfClass("Tool")
+        if tool then
+            local handle = tool:FindFirstChild("Handle")
+            if handle then
+                handle.Size = handle.Size * reachMultiplier  -- 大きくする
+                handle.Transparency = 0.7
             end
         end
+        wait(0.1)
     end
 end
 
--- ==================== Silent Aim ====================
-local mt = getrawmetatable(game)
-local oldNamecall = mt.__namecall
-setreadonly(mt, false)
-
-mt.__namecall = newcclosure(function(self, ...)
-    local args = {...}
-    local method = getnamecallmethod()
-
-    if Config.SilentAim and method == "FireServer" then
-        local target = GetClosestTarget()
-        if target and target.Character and target.Character:FindFirstChild(Config.AimPart) then
-            if self.Name:lower():find("shoot") or self.Name:lower():find("bullet") or self.Name:lower():find("fire") then
-                args[1] = target.Character[Config.AimPart].Position
-                return oldNamecall(self, unpack(args))
-            end
-        end
-    end
-    return oldNamecall(self, ...)
-end)
-
-setreadonly(mt, true)
-
-local function GetClosestTarget()
-    local closest, dist = nil, math.huge
-    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return nil end
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild(Config.AimPart) then
-            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health > 0 then
-                local d = (plr.Character[Config.AimPart].Position - Camera.CFrame.Position).Magnitude
-                if d < dist and d <= Config.SilentFOV then
-                    dist = d
-                    closest = plr
-                end
-            end
-        end
-    end
-    return closest
-end
-
--- ==================== Main Loop ====================
-RunService.RenderStepped:Connect(function()
-    if Config.ESP then
-        UpdateESP()
+-- トグル
+ToggleButton.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    if enabled then
+        ToggleButton.Text = "ON"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+        applyReach()
+    else
+        ToggleButton.Text = "OFF"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     end
 end)
 
-print("Nemesis Alpha ESP + Silent Aim
+print("Bridge Duel Reach Cheat Loaded! Default: " .. (reachMultiplier*100) .. "%")
