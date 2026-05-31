@@ -1,68 +1,90 @@
--- Bridge Duel Simple Reach (On/Off UI)
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+local Window = Library.CreateLib("MVSD OP チート", "DarkTheme")
 
-local reachMultiplier = 1.6  -- ここを変更（1.3 = 低リスク, 1.6 = バランス, 2.0 = 強力）
-local enabled = false
+local Tab = Window:NewTab("メイン機能")
+local Section = Tab:NewSection("All Kill & Combat")
 
--- シンプルUI
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ReachToggle"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = player:WaitForChild("PlayerGui")
+local aimbot = false
+local silent = false
+local flyon = false
+local velocity = 1
+local allkill = false
 
-local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 180, 0, 80)
-Frame.Position = UDim2.new(0.5, -90, 0.1, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Frame.BorderSizePixel = 0
-Frame.Parent = ScreenGui
-
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0.5, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "Bridge Duel Reach"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextScaled = true
-Title.Font = Enum.Font.SourceSansBold
-Title.Parent = Frame
-
-local ToggleButton = Instance.new("TextButton")
-ToggleButton.Size = UDim2.new(0.9, 0, 0.4, 0)
-ToggleButton.Position = UDim2.new(0.05, 0, 0.55, 0)
-ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-ToggleButton.Text = "OFF"
-ToggleButton.TextColor3 = Color3.new(1,1,1)
-ToggleButton.TextScaled = true
-ToggleButton.Font = Enum.Font.SourceSansBold
-ToggleButton.Parent = Frame
-
--- Reach機能
-local function applyReach()
-    while enabled and player.Character do
-        local tool = player.Character:FindFirstChildOfClass("Tool")
-        if tool then
-            local handle = tool:FindFirstChild("Handle")
-            if handle then
-                handle.Size = handle.Size * reachMultiplier  -- 大きくする
-                handle.Transparency = 0.7
+-- All Kill (超高速)
+Section:NewToggle("All Kill (0.0001秒)", "全員即キル", function(state)
+    allkill = state
+    if allkill then
+        spawn(function()
+            while allkill do
+                for _, v in pairs(game.Players:GetPlayers()) do
+                    if v ~= game.Players.LocalPlayer and v.Character and v.Character:FindFirstChild("Humanoid") then
+                        v.Character.Humanoid.Health = 0
+                    end
+                end
+                wait(0.0001)
             end
-        end
-        wait(0.1)
-    end
-end
-
--- トグル
-ToggleButton.MouseButton1Click:Connect(function()
-    enabled = not enabled
-    if enabled then
-        ToggleButton.Text = "ON"
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-        applyReach()
-    else
-        ToggleButton.Text = "OFF"
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        end)
     end
 end)
 
-print("Bridge Duel Reach Cheat Loaded! Default: " .. (reachMultiplier*100) .. "%")
+Section:NewToggle("Aimbot", "自動で敵に狙う", function(state)
+    aimbot = state
+    print("Aimbot ".. (aimbot and "ON" or "OFF"))
+end)
+
+Section:NewToggle("Silent Aim", "当たるようにする", function(state)
+    silent = state
+    print("Silent Aim ".. (silent and "ON" or "OFF"))
+end)
+
+Section:NewSlider("Velocity", "移動速度", 100, 1, 500, function(val)
+    velocity = val
+    local char = game.Players.LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        char.HumanoidRootPart.Velocity = char.HumanoidRootPart.Velocity * (velocity/50)
+    end
+end)
+
+Section:NewToggle("Fly", "空を飛ぶ", function(state)
+    flyon = state
+    local player = game.Players.LocalPlayer
+    local char = player.Character
+    if flyon and char then
+        local body = Instance.new("BodyVelocity")
+        body.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        body.Velocity = Vector3.new(0,0,0)
+        body.Parent = char.HumanoidRootPart
+        game:GetService("UserInputService").InputBegan:Connect(function(key)
+            if key.KeyCode == Enum.KeyCode.Space then body.Velocity = Vector3.new(0,50,0) end
+        end)
+    end
+end)
+
+-- Auto Farm
+Section:NewButton("Auto Farm 最強", "0.0001秒で銃連射", function()
+    spawn(function()
+        while true do
+            local tool = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if tool then
+                tool:Activate()
+            end
+            wait(0.0001)
+        end
+    end)
+end)
+
+local ESPSection = Tab:NewSection("ESP")
+ESPSection:NewToggle("ESP", "敵が見える", function(state)
+    if state then
+        for _, plr in pairs(game.Players:GetPlayers()) do
+            if plr ~= game.Players.LocalPlayer then
+                local esp = Instance.new("Highlight")
+                esp.Parent = plr.Character
+                esp.FillColor = Color3.new(1,0,0)
+                esp.OutlineColor = Color3.new(1,1,1)
+            end
+        end
+    end
+end)
+
+print("MVSD チート起動！ Kavo UIで全部操作してね")
